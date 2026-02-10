@@ -49,3 +49,8 @@ All notable changes to this project will be documented here.
 - Added `packs/maps/world-classic/map.svg` with complete canonical territory IDs (placeholder geometry)
 - Added `Risk.Engine.Tests/MapPackAssetConsistencyTests.cs` to enforce ID consistency across `map.json`, `map.svg`, and i18n files
 - Expanded engine automated coverage to 31 passing tests
+- RIS-STEP-009 host networking layer completed:
+- Added in-memory signaling/event service in `Risk.Host` for room peers
+- Added REST endpoints for peer register, signal send/poll, and host event publish/poll
+- Added `Risk.Host.Tests` integration suite for signaling/event API behavior
+- Expanded total automated coverage to 36 passing tests
