@@ -45,3 +45,7 @@ All notable changes to this project will be documented here.
 - Added map pack domain models (`MapPack`, `MapTerritory`, `MapContinent`, validation result)
 - Added `Risk.Engine.Tests/MapPackLoaderTests.cs` including world-classic load/validate checks
 - Expanded engine automated coverage to 30 passing tests
+- RIS-STEP-008 world-classic starter pack completed:
+- Added `packs/maps/world-classic/map.svg` with complete canonical territory IDs (placeholder geometry)
+- Added `Risk.Engine.Tests/MapPackAssetConsistencyTests.cs` to enforce ID consistency across `map.json`, `map.svg`, and i18n files
+- Expanded engine automated coverage to 31 passing tests

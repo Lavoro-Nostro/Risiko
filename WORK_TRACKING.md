@@ -17,8 +17,9 @@ Recommended status board columns:
 - RIS-STEP-005: DONE
 - RIS-STEP-006: DONE
 - RIS-STEP-007: DONE
+- RIS-STEP-008: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-007-map-pack-loader`
+- `feature/ris-step-008-world-classic-pack`
