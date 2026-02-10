@@ -1,7 +1,9 @@
+using Risk.Host.Gameplay;
 using Risk.Host.Networking;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<ISignalingService, InMemorySignalingService>();
+builder.Services.AddSingleton<IMatchSessionService, InMemoryMatchSessionService>();
 
 var app = builder.Build();
 
@@ -55,6 +57,36 @@ app.MapGet("/api/rooms/{roomId}/peers/{peerId}/events",
         // peerId reserved for future auth checks and filtering; currently host events are room-wide.
         var events = signaling.GetHostEvents(roomId, after ?? 0);
         return Results.Ok(events);
+    });
+
+app.MapPost("/api/matches/{matchId}/initialize",
+    (string matchId, InitializeMatchRequest request, IMatchSessionService matches) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.RoomId) ||
+            string.IsNullOrWhiteSpace(request.HostPeerId) ||
+            string.IsNullOrWhiteSpace(request.ActivePlayerId) ||
+            request.Players.Count == 0 ||
+            request.Territories.Count == 0)
+        {
+            return Results.BadRequest("roomId, hostPeerId, activePlayerId, players and territories are required.");
+        }
+
+        var response = matches.InitializeMatch(matchId, request);
+        return Results.Ok(response);
+    });
+
+app.MapPost("/api/matches/{matchId}/commands",
+    (string matchId, SubmitCommandRequest request, IMatchSessionService matches) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.PeerId) || string.IsNullOrWhiteSpace(request.Type))
+        {
+            return Results.BadRequest("peerId and type are required.");
+        }
+
+        var response = matches.SubmitCommand(matchId, request);
+        return response.Accepted
+            ? Results.Ok(response)
+            : Results.Conflict(response);
     });
 
 app.Run();
