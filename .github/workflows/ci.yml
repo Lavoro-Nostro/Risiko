@@ -65,15 +65,24 @@ jobs:
             find . -name "*.csproj" -print0 | xargs -0 -n1 dotnet build --configuration Release
           fi
 
+      - name: Test .NET projects (if test projects are present)
+        if: ${{ hashFiles('**/*Tests.csproj') != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test --configuration Release --no-build
+
       - name: Setup Node.js
-        if: ${{ hashFiles('**/package.json') != '' }}
+        if: ${{ hashFiles('Risk.Web/package.json') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: 'Risk.Web/package-lock.json'
 
       - name: Install frontend dependencies (if present)
-        if: ${{ hashFiles('**/package.json') != '' }}
+        if: ${{ hashFiles('Risk.Web/package.json') != '' }}
+        working-directory: Risk.Web
         shell: bash
         run: |
           set -euo pipefail
@@ -84,7 +93,8 @@ jobs:
           fi
 
       - name: Run frontend checks (if scripts exist)
-        if: ${{ hashFiles('**/package.json') != '' }}
+        if: ${{ hashFiles('Risk.Web/package.json') != '' }}
+        working-directory: Risk.Web
         shell: bash
         run: |
           set -euo pipefail

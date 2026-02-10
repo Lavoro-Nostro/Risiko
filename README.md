@@ -51,6 +51,12 @@ Build backend modules:
 dotnet build Risiko.slnx -c Release
 ```
 
+Run automated tests:
+
+```bash
+dotnet test Risiko.slnx -c Release
+```
+
 Run host module:
 
 ```bash
