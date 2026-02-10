@@ -48,6 +48,8 @@ type SubmitCommandResponse = {
   appliedEventCount: number;
 };
 
+type CommandFeedbackKind = "idle" | "success" | "error" | "info";
+
 type HostEventMessage = {
   sequence: number;
   roomId: string;
@@ -146,6 +148,20 @@ function parseEventPayload<T>(payload: string): T | null {
   }
 }
 
+function commandErrorLabel(errorCode: number): string {
+  return (
+    {
+      1: "Invalid phase for this action",
+      2: "Not active player",
+      3: "Invalid ownership",
+      4: "Territories are not adjacent",
+      5: "Invalid army amount",
+      6: "Invalid fortify path",
+      999: "Unknown validation error"
+    }[errorCode] ?? "Validation error"
+  );
+}
+
 function App() {
   const mapRootRef = useRef<HTMLDivElement>(null);
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string | null>(null);
@@ -168,8 +184,14 @@ function App() {
   const [fortifyToId, setFortifyToId] = useState("");
   const [fortifyArmies, setFortifyArmies] = useState(1);
   const [commandStatus, setCommandStatus] = useState<string>("-");
+  const [commandFeedbackKind, setCommandFeedbackKind] = useState<CommandFeedbackKind>("idle");
+  const [isCommandSubmitting, setIsCommandSubmitting] = useState(false);
   const [lastEventSequence, setLastEventSequence] = useState(0);
   const [lastEventType, setLastEventType] = useState("-");
+  const [isStateSyncing, setIsStateSyncing] = useState(false);
+  const [isEventSyncing, setIsEventSyncing] = useState(false);
+  const [eventSyncError, setEventSyncError] = useState<string | null>(null);
+  const [lastSyncEpochMs, setLastSyncEpochMs] = useState<number | null>(null);
   const [underAttackTerritoryId, setUnderAttackTerritoryId] = useState<string | null>(null);
   const [capturedTerritoryId, setCapturedTerritoryId] = useState<string | null>(null);
   const [recentArmyChangeIds, setRecentArmyChangeIds] = useState<string[]>([]);
@@ -282,6 +304,19 @@ function App() {
   const maxAttackerDice = Math.min(3, Math.max(0, attackFromArmies - 1));
   const defenderDice = Math.min(2, Math.max(0, attackToArmies));
   const combatComparisons = Math.min(attackDice, defenderDice);
+  const hasAuthoritativeState = Boolean(authoritativeState);
+  const syncLagSeconds =
+    lastSyncEpochMs === null ? null : Math.max(0, Math.floor((Date.now() - lastSyncEpochMs) / 1000));
+  const showLoadingOverlay = isConnected && (isStateSyncing || isEventSyncing) && !hasAuthoritativeState;
+  const showReconnectOverlay = isConnected && (Boolean(loadError) || Boolean(eventSyncError));
+  const globalActionBlocked = !isConnected || !hasAuthoritativeState || isCommandSubmitting;
+  const blockedReason = !isConnected
+    ? "Connect to host and sync match state first."
+    : !hasAuthoritativeState
+      ? "Waiting for authoritative match state."
+      : isCommandSubmitting
+        ? "A command is currently being submitted."
+        : "";
 
   const pulseArmyChange = useCallback((territoryIds: string[]) => {
     if (!territoryIds.length) {
@@ -361,19 +396,25 @@ function App() {
   );
 
   const fetchAuthoritativeState = useCallback(async () => {
-    const response = await fetch(
-      `${hostUrl.replace(/\/$/, "")}/api/matches/${encodeURIComponent(matchId.trim())}/state`
-    );
+    setIsStateSyncing(true);
+    try {
+      const response = await fetch(
+        `${hostUrl.replace(/\/$/, "")}/api/matches/${encodeURIComponent(matchId.trim())}/state`
+      );
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const payload = (await response.json()) as MatchStateResponse;
+      setAuthoritativeState(payload.state);
+      setRoomId(payload.roomId);
+      setLoadError(null);
+      setLastSyncTime(new Date().toLocaleTimeString());
+      setLastSyncEpochMs(Date.now());
+    } finally {
+      setIsStateSyncing(false);
     }
-
-    const payload = (await response.json()) as MatchStateResponse;
-    setAuthoritativeState(payload.state);
-    setRoomId(payload.roomId);
-    setLoadError(null);
-    setLastSyncTime(new Date().toLocaleTimeString());
   }, [hostUrl, matchId]);
 
   const selectableTerritoryIds = useMemo(
@@ -425,23 +466,29 @@ function App() {
 
     let cancelled = false;
     const fetchEvents = async () => {
+      setIsEventSyncing(true);
       try {
         const response = await fetch(
           `${hostUrl.replace(/\/$/, "")}/api/rooms/${encodeURIComponent(roomId)}/peers/${encodeURIComponent(peerId)}/events?after=${lastEventSequence}`
         );
         if (!response.ok) {
+          setEventSyncError(`Event sync failed (HTTP ${response.status}).`);
           return;
         }
 
         const events = (await response.json()) as HostEventMessage[];
         if (cancelled || !events.length) {
+          setEventSyncError(null);
           return;
         }
 
         const ordered = [...events].sort((a, b) => a.sequence - b.sequence);
         await processHostEvents(ordered);
+        setEventSyncError(null);
       } catch {
-        // keep UI resilient if host event polling temporarily fails
+        setEventSyncError("Event sync temporarily unavailable.");
+      } finally {
+        setIsEventSyncing(false);
       }
     };
 
@@ -620,11 +667,13 @@ function App() {
   const submitCommand = async (type: string, payload: Record<string, unknown>) => {
     if (!isConnected || !matchId.trim()) {
       setCommandStatus("Host state sync is not active.");
+      setCommandFeedbackKind("error");
       return;
     }
 
     if (!peerId.trim() || !commandPlayerId.trim()) {
       setCommandStatus("peerId and playerId are required.");
+      setCommandFeedbackKind("error");
       return;
     }
 
@@ -640,6 +689,9 @@ function App() {
     };
 
     try {
+      setIsCommandSubmitting(true);
+      setCommandFeedbackKind("info");
+      setCommandStatus(`Submitting ${type}...`);
       const response = await fetch(
         `${hostUrl.replace(/\/$/, "")}/api/matches/${encodeURIComponent(matchId.trim())}/commands`,
         {
@@ -651,14 +703,20 @@ function App() {
 
       const result = (await response.json()) as SubmitCommandResponse;
       if (!response.ok || !result.accepted) {
-        setCommandStatus(`Rejected (${result.errorCode}): ${result.message}`);
+        const label = commandErrorLabel(result.errorCode);
+        setCommandStatus(`Rejected (${result.errorCode} - ${label}): ${result.message}`);
+        setCommandFeedbackKind("error");
         return;
       }
 
       setCommandStatus(`Accepted: ${type} (${result.appliedEventCount} event(s))`);
+      setCommandFeedbackKind("success");
       await fetchAuthoritativeState();
     } catch (error) {
       setCommandStatus(`Command error: ${(error as Error).message}`);
+      setCommandFeedbackKind("error");
+    } finally {
+      setIsCommandSubmitting(false);
     }
   };
 
@@ -741,7 +799,7 @@ function App() {
             <button
               type="button"
               onClick={() => setIsConnected(true)}
-              disabled={!hostUrl.trim() || !matchId.trim()}
+              disabled={!hostUrl.trim() || !matchId.trim() || isStateSyncing}
             >
               Avvia Sync Stato
             </button>
@@ -757,6 +815,9 @@ function App() {
                 setUnderAttackTerritoryId(null);
                 setCapturedTerritoryId(null);
                 setRecentArmyChangeIds([]);
+                setEventSyncError(null);
+                setCommandFeedbackKind("idle");
+                setCommandStatus("-");
               }}
             >
               Disconnetti
@@ -764,7 +825,10 @@ function App() {
           </div>
 
           <p>Sync: {isConnected ? "attivo" : "disattivo"}</p>
+          <p>State sync: {isStateSyncing ? "in corso" : "idle"}</p>
+          <p>Event sync: {isEventSyncing ? "in corso" : "idle"}</p>
           <p>Ultimo aggiornamento: {lastSyncTime}</p>
+          <p>Latenza sync: {syncLagSeconds === null ? "-" : `${syncLagSeconds}s`}</p>
           <p>Turno: {authoritativeState?.turnIndex ?? "-"}</p>
           <p>Round: {authoritativeState?.roundIndex ?? "-"}</p>
           <p>Fase: {authoritativeState?.phase ?? "-"}</p>
@@ -772,6 +836,8 @@ function App() {
           <p>Rinforzi disponibili: {reinforcementPool}</p>
           <p>Room ID: {roomId || "-"}</p>
           {loadError && <p className="sync-error">{loadError}</p>}
+          {eventSyncError && <p className="sync-error">{eventSyncError}</p>}
+          {blockedReason && <p className="ux-hint">{blockedReason}</p>}
 
           <h2>Identita Comando</h2>
           <label className="field">
@@ -818,7 +884,12 @@ function App() {
             </label>
             <button
               type="button"
-              disabled={currentPhase !== "reinforcement" || !reinforceTerritoryId || reinforceArmies < 1}
+              disabled={
+                globalActionBlocked ||
+                currentPhase !== "reinforcement" ||
+                !reinforceTerritoryId ||
+                reinforceArmies < 1
+              }
               onClick={() =>
                 submitCommand("PlaceReinforcements", {
                   territoryId: reinforceTerritoryId,
@@ -869,6 +940,7 @@ function App() {
             <button
               type="button"
               disabled={
+                globalActionBlocked ||
                 currentPhase !== "attack" ||
                 !attackFromId ||
                 !attackToId ||
@@ -920,7 +992,12 @@ function App() {
             </label>
             <button
               type="button"
-              disabled={currentPhase !== "fortify" || !fortifyFromId || !fortifyToId}
+              disabled={
+                globalActionBlocked ||
+                currentPhase !== "fortify" ||
+                !fortifyFromId ||
+                !fortifyToId
+              }
               onClick={() =>
                 submitCommand("Fortify", {
                   fromTerritoryId: fortifyFromId,
@@ -935,10 +1012,14 @@ function App() {
 
           <div className="action-section">
             <h3>Turn</h3>
-            <button type="button" onClick={() => submitCommand("EndTurn", {})}>
+            <button
+              type="button"
+              disabled={globalActionBlocked}
+              onClick={() => submitCommand("EndTurn", {})}
+            >
               End Turn
             </button>
-            <p className="command-status">{commandStatus}</p>
+            <p className={`command-status is-${commandFeedbackKind}`}>{commandStatus}</p>
           </div>
 
           <div className="legend">
@@ -970,11 +1051,29 @@ function App() {
           )}
         </aside>
 
-        <div
-          ref={mapRootRef}
-          className="map-canvas"
-          dangerouslySetInnerHTML={{ __html: worldClassic.svg }}
-        />
+        <div className="map-stage">
+          <div
+            ref={mapRootRef}
+            className="map-canvas"
+            dangerouslySetInnerHTML={{ __html: worldClassic.svg }}
+          />
+          {showLoadingOverlay && (
+            <div className="map-overlay">
+              <div className="overlay-card">
+                <strong>Syncing match state...</strong>
+                <p>Waiting for authoritative host snapshot.</p>
+              </div>
+            </div>
+          )}
+          {showReconnectOverlay && !showLoadingOverlay && (
+            <div className="map-overlay warning">
+              <div className="overlay-card">
+                <strong>Connection issue detected</strong>
+                <p>{loadError ?? eventSyncError ?? "Host connection temporarily unavailable."}</p>
+              </div>
+            </div>
+          )}
+        </div>
 
         <aside className="territory-panel tactical-panel">
           <h2>Tactical Context</h2>
