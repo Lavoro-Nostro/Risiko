@@ -125,6 +125,38 @@ body {
   cursor: default;
 }
 
+.action-section {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.7rem;
+  margin: 0.7rem 0;
+  background: color-mix(in srgb, #ffffff 94%, #eef4fa 6%);
+}
+
+.action-section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.action-section button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+}
+
+.action-section button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.command-status {
+  margin-top: 0.6rem;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.82rem;
+}
+
 .legend {
   display: grid;
   gap: 0.35rem;

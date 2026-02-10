@@ -25,8 +25,9 @@ Recommended status board columns:
 - RIS-STEP-013: DONE
 - RIS-STEP-014: DONE
 - RIS-STEP-015: DONE
+- RIS-STEP-016: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-015-live-authoritative-state-binding`
+- `feature/ris-step-016-turn-phase-controls`

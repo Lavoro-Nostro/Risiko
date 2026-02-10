@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   labelForTerritory,
   territoryIdsFromSvg,
@@ -24,6 +24,7 @@ type HostGameState = {
   turnIndex: number;
   roundIndex: number;
   activePlayerId: string;
+  reinforcementsAvailable: number;
   territories: Record<string, HostTerritoryState>;
 };
 
@@ -31,6 +32,13 @@ type MatchStateResponse = {
   matchId: string;
   roomId: string;
   state: HostGameState;
+};
+
+type SubmitCommandResponse = {
+  accepted: boolean;
+  errorCode: number;
+  message: string;
+  appliedEventCount: number;
 };
 
 const OWNER_COLORS = ["#e8a8a8", "#a8c5f5", "#afe1b0", "#f0c286", "#c8b0e7", "#94ddd3"];
@@ -105,6 +113,17 @@ function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string>("-");
   const [authoritativeState, setAuthoritativeState] = useState<HostGameState | null>(null);
+  const [peerId, setPeerId] = useState("");
+  const [commandPlayerId, setCommandPlayerId] = useState("");
+  const [reinforceTerritoryId, setReinforceTerritoryId] = useState("");
+  const [reinforceArmies, setReinforceArmies] = useState(1);
+  const [attackFromId, setAttackFromId] = useState("");
+  const [attackToId, setAttackToId] = useState("");
+  const [attackDice, setAttackDice] = useState(1);
+  const [fortifyFromId, setFortifyFromId] = useState("");
+  const [fortifyToId, setFortifyToId] = useState("");
+  const [fortifyArmies, setFortifyArmies] = useState(1);
+  const [commandStatus, setCommandStatus] = useState<string>("-");
   const validationErrors = useMemo(() => validateWorldClassicBinding(), []);
   const territoryCount = worldClassic.map.territories.length;
   const ownerByTerritoryId = useMemo<Record<string, string>>(() => {
@@ -131,6 +150,7 @@ function App() {
   }, [authoritativeState]);
   const currentPhase = parsePhase(authoritativeState?.phase);
   const currentPlayerId = authoritativeState?.activePlayerId ?? "";
+  const reinforcementPool = authoritativeState?.reinforcementsAvailable ?? 0;
   const selectedTerritory = selectedTerritoryId
     ? worldClassic.map.territories.find(territory => territory.id === selectedTerritoryId) ?? null
     : null;
@@ -138,6 +158,55 @@ function App() {
     () => new Set(selectedTerritory?.neighbors ?? []),
     [selectedTerritory]
   );
+  const ownedTerritories = useMemo(
+    () =>
+      worldClassic.map.territories
+        .filter(territory => ownerByTerritoryId[territory.id] === commandPlayerId)
+        .map(territory => territory.id),
+    [commandPlayerId, ownerByTerritoryId]
+  );
+  const attackTargets = useMemo(() => {
+    if (!attackFromId) {
+      return [];
+    }
+
+    const from = worldClassic.map.territories.find(territory => territory.id === attackFromId);
+    if (!from) {
+      return [];
+    }
+
+    return from.neighbors.filter(id => {
+      const owner = ownerByTerritoryId[id];
+      return owner && owner !== "neutral" && owner !== commandPlayerId;
+    });
+  }, [attackFromId, commandPlayerId, ownerByTerritoryId]);
+  const fortifyTargets = useMemo(() => {
+    if (!fortifyFromId) {
+      return [];
+    }
+
+    const from = worldClassic.map.territories.find(territory => territory.id === fortifyFromId);
+    if (!from) {
+      return [];
+    }
+
+    return from.neighbors.filter(id => ownerByTerritoryId[id] === commandPlayerId);
+  }, [fortifyFromId, commandPlayerId, ownerByTerritoryId]);
+
+  const fetchAuthoritativeState = useCallback(async () => {
+    const response = await fetch(
+      `${hostUrl.replace(/\/$/, "")}/api/matches/${encodeURIComponent(matchId.trim())}/state`
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const payload = (await response.json()) as MatchStateResponse;
+    setAuthoritativeState(payload.state);
+    setLoadError(null);
+    setLastSyncTime(new Date().toLocaleTimeString());
+  }, [hostUrl, matchId]);
 
   const selectableTerritoryIds = useMemo(
     () =>
@@ -159,22 +228,11 @@ function App() {
     let cancelled = false;
     const fetchState = async () => {
       try {
-        const response = await fetch(
-          `${hostUrl.replace(/\/$/, "")}/api/matches/${encodeURIComponent(matchId.trim())}/state`
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const payload = (await response.json()) as MatchStateResponse;
         if (cancelled) {
           return;
         }
 
-        setAuthoritativeState(payload.state);
-        setLoadError(null);
-        setLastSyncTime(new Date().toLocaleTimeString());
+        await fetchAuthoritativeState();
       } catch (error) {
         if (cancelled) {
           return;
@@ -190,7 +248,56 @@ function App() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [hostUrl, matchId, isConnected]);
+  }, [fetchAuthoritativeState, isConnected, matchId]);
+
+  useEffect(() => {
+    if (!currentPlayerId) {
+      return;
+    }
+
+    setCommandPlayerId(currentPlayerId);
+    setPeerId(currentPlayerId);
+  }, [currentPlayerId]);
+
+  useEffect(() => {
+    if (!ownedTerritories.length) {
+      return;
+    }
+
+    if (!reinforceTerritoryId || !ownedTerritories.includes(reinforceTerritoryId)) {
+      setReinforceTerritoryId(ownedTerritories[0]);
+    }
+
+    if (!attackFromId || !ownedTerritories.includes(attackFromId)) {
+      setAttackFromId(ownedTerritories[0]);
+    }
+
+    if (!fortifyFromId || !ownedTerritories.includes(fortifyFromId)) {
+      setFortifyFromId(ownedTerritories[0]);
+    }
+  }, [attackFromId, fortifyFromId, ownedTerritories, reinforceTerritoryId]);
+
+  useEffect(() => {
+    if (!attackTargets.length) {
+      setAttackToId("");
+      return;
+    }
+
+    if (!attackToId || !attackTargets.includes(attackToId)) {
+      setAttackToId(attackTargets[0]);
+    }
+  }, [attackTargets, attackToId]);
+
+  useEffect(() => {
+    if (!fortifyTargets.length) {
+      setFortifyToId("");
+      return;
+    }
+
+    if (!fortifyToId || !fortifyTargets.includes(fortifyToId)) {
+      setFortifyToId(fortifyTargets[0]);
+    }
+  }, [fortifyTargets, fortifyToId]);
 
   useEffect(() => {
     const root = mapRootRef.current;
@@ -289,6 +396,51 @@ function App() {
     : null;
   const selectedArmies = selectedTerritoryId ? armyByTerritoryId[selectedTerritoryId] ?? 0 : 0;
 
+  const submitCommand = async (type: string, payload: Record<string, unknown>) => {
+    if (!isConnected || !matchId.trim()) {
+      setCommandStatus("Host state sync is not active.");
+      return;
+    }
+
+    if (!peerId.trim() || !commandPlayerId.trim()) {
+      setCommandStatus("peerId and playerId are required.");
+      return;
+    }
+
+    const commandId = `web-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const requestBody = {
+      peerId: peerId.trim(),
+      type,
+      payload: {
+        playerId: commandPlayerId.trim(),
+        commandId,
+        ...payload
+      }
+    };
+
+    try {
+      const response = await fetch(
+        `${hostUrl.replace(/\/$/, "")}/api/matches/${encodeURIComponent(matchId.trim())}/commands`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody)
+        }
+      );
+
+      const result = (await response.json()) as SubmitCommandResponse;
+      if (!response.ok || !result.accepted) {
+        setCommandStatus(`Rejected (${result.errorCode}): ${result.message}`);
+        return;
+      }
+
+      setCommandStatus(`Accepted: ${type} (${result.appliedEventCount} event(s))`);
+      await fetchAuthoritativeState();
+    } catch (error) {
+      setCommandStatus(`Command error: ${(error as Error).message}`);
+    }
+  };
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -353,7 +505,168 @@ function App() {
           <p>Round: {authoritativeState?.roundIndex ?? "-"}</p>
           <p>Fase: {authoritativeState?.phase ?? "-"}</p>
           <p>Giocatore attivo: {currentPlayerId || "-"}</p>
+          <p>Rinforzi disponibili: {reinforcementPool}</p>
           {loadError && <p className="sync-error">{loadError}</p>}
+
+          <h2>Identita Comando</h2>
+          <label className="field">
+            Peer ID
+            <input
+              value={peerId}
+              onChange={event => setPeerId(event.target.value)}
+              placeholder="peer-id"
+            />
+          </label>
+          <label className="field">
+            Player ID
+            <input
+              value={commandPlayerId}
+              onChange={event => setCommandPlayerId(event.target.value)}
+              placeholder="player-id"
+            />
+          </label>
+
+          <h2>Azioni Turno</h2>
+          <div className="action-section">
+            <h3>Reinforce</h3>
+            <label className="field">
+              Territorio
+              <select
+                value={reinforceTerritoryId}
+                onChange={event => setReinforceTerritoryId(event.target.value)}
+              >
+                {ownedTerritories.map(id => (
+                  <option key={id} value={id}>
+                    {labelForTerritory(id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Armate
+              <input
+                type="number"
+                min={1}
+                value={reinforceArmies}
+                onChange={event => setReinforceArmies(Math.max(1, Number(event.target.value) || 1))}
+              />
+            </label>
+            <button
+              type="button"
+              disabled={currentPhase !== "reinforcement" || !reinforceTerritoryId || reinforceArmies < 1}
+              onClick={() =>
+                submitCommand("PlaceReinforcements", {
+                  territoryId: reinforceTerritoryId,
+                  armiesToPlace: reinforceArmies
+                })
+              }
+            >
+              Place Reinforcements
+            </button>
+          </div>
+
+          <div className="action-section">
+            <h3>Attack</h3>
+            <label className="field">
+              Da
+              <select value={attackFromId} onChange={event => setAttackFromId(event.target.value)}>
+                {ownedTerritories.map(id => (
+                  <option key={id} value={id}>
+                    {labelForTerritory(id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              A
+              <select value={attackToId} onChange={event => setAttackToId(event.target.value)}>
+                {attackTargets.map(id => (
+                  <option key={id} value={id}>
+                    {labelForTerritory(id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Dadi Attaccante
+              <input
+                type="number"
+                min={1}
+                max={3}
+                value={attackDice}
+                onChange={event =>
+                  setAttackDice(Math.min(3, Math.max(1, Number(event.target.value) || 1)))
+                }
+              />
+            </label>
+            <button
+              type="button"
+              disabled={currentPhase !== "attack" || !attackFromId || !attackToId}
+              onClick={() =>
+                submitCommand("Attack", {
+                  fromTerritoryId: attackFromId,
+                  toTerritoryId: attackToId,
+                  attackerDice: attackDice
+                })
+              }
+            >
+              Attack
+            </button>
+          </div>
+
+          <div className="action-section">
+            <h3>Fortify</h3>
+            <label className="field">
+              Da
+              <select value={fortifyFromId} onChange={event => setFortifyFromId(event.target.value)}>
+                {ownedTerritories.map(id => (
+                  <option key={id} value={id}>
+                    {labelForTerritory(id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              A
+              <select value={fortifyToId} onChange={event => setFortifyToId(event.target.value)}>
+                {fortifyTargets.map(id => (
+                  <option key={id} value={id}>
+                    {labelForTerritory(id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Armate
+              <input
+                type="number"
+                min={1}
+                value={fortifyArmies}
+                onChange={event => setFortifyArmies(Math.max(1, Number(event.target.value) || 1))}
+              />
+            </label>
+            <button
+              type="button"
+              disabled={currentPhase !== "fortify" || !fortifyFromId || !fortifyToId}
+              onClick={() =>
+                submitCommand("Fortify", {
+                  fromTerritoryId: fortifyFromId,
+                  toTerritoryId: fortifyToId,
+                  armiesToMove: fortifyArmies
+                })
+              }
+            >
+              Fortify
+            </button>
+          </div>
+
+          <div className="action-section">
+            <h3>Turn</h3>
+            <button type="button" onClick={() => submitCommand("EndTurn", {})}>
+              End Turn
+            </button>
+            <p className="command-status">{commandStatus}</p>
+          </div>
 
           <div className="legend">
             <span className="legend-item neutral">Neutrale</span>
