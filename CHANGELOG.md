@@ -16,6 +16,12 @@ Dates are in ISO format (`YYYY-MM-DD`).
 - Current phase/turn/round summary panel.
 - Expanded territory detail panel.
 - Combat preview panel linked to selected attack source/target and dice settings.
+- RIS-STEP-018 baseline event animations in `Risk.Web`:
+- Ordered host-event polling and processing keyed by event sequence.
+- Dice-roll animation triggered from `AttackResolvedEvent`.
+- Attack flash state (`under-attack`) tied to attack events.
+- Army badge pulse transitions on event-driven army changes.
+- Capture sweep animation triggered by `TerritoryCapturedEvent`.
 
 ### Changed
 - `Risk.Web` now submits turn commands directly to `Risk.Host` via `POST /api/matches/{matchId}/commands`.
@@ -26,6 +32,9 @@ Dates are in ISO format (`YYYY-MM-DD`).
 - `Risk.Web/src/App.tsx`
 - `Risk.Web/src/styles.css`
 - RIS-STEP-017:
+- `Risk.Web/src/App.tsx`
+- `Risk.Web/src/styles.css`
+- RIS-STEP-018:
 - `Risk.Web/src/App.tsx`
 - `Risk.Web/src/styles.css`
 

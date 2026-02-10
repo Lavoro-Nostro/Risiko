@@ -21,6 +21,11 @@ Current scope:
 - Current phase/turn/round summary
 - Territory detail panel
 - Combat preview panel
+- Baseline event-driven animations implemented:
+- Dice-roll animation triggered by ordered host attack events
+- Attack flash state from host event stream
+- Army badge pulse on territory army updates
+- Capture sweep animation on territory capture events
 
 Planned next milestones:
-- RIS-STEP-018 baseline combat/map animations
+- RIS-STEP-019 UX hardening and clearer invalid-action messaging
