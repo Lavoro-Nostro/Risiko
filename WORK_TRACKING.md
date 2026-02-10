@@ -14,8 +14,9 @@ Recommended status board columns:
 - RIS-STEP-002: DONE
 - RIS-STEP-003: DONE
 - RIS-STEP-004: DONE
+- RIS-STEP-005: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-004-command-handlers`
+- `feature/ris-step-005-event-replay`

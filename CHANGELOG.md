@@ -27,3 +27,10 @@ All notable changes to this project will be documented here.
 - Added adjacency/path-based validation for attack and fortify
 - Added `CommandExecutionResult` for accepted/rejected command outcomes
 - Added `Risk.Engine.Tests/GameCommandHandlerTests.cs` to validate command transitions and phase rules
+- Added complete world-classic map metadata (42 territories, continents, adjacency, en/it labels)
+- RIS-STEP-005 event emission and replay completed:
+- Added event store abstraction (`IGameEventStore`) and in-memory implementation
+- Added `GameStateProjector` to rebuild state by replaying events
+- Added event envelope model for accepted/rejected command outcomes
+- Updated command handler to emit domain events for accepted commands with sequence IDs
+- Added `Risk.Engine.Tests/EventSourcingTests.cs` for event store ordering, replay, and sequence continuation
