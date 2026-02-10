@@ -16,3 +16,8 @@ All notable changes to this project will be documented here.
 - Added command validation result model and error codes
 - Added `Risk.Web/package-lock.json` for deterministic npm installs
 - Added `Risk.Engine.Tests` xUnit suite for contract-level validation
+- RIS-STEP-003 GameState model completed:
+- Added `GameState` with phase/turn/round, active player, reinforcements, capture flag, and RNG seed
+- Added `PlayerState` and `TerritoryState`
+- Added GameState transition helpers (`WithPhase`, `WithReinforcements`, `MarkTerritoryCaptured`, `AdvanceTurn`, `SetTerritoryState`)
+- Added `Risk.Engine.Tests/GameStateTests.cs` for GameState transitions and non-mutation behavior

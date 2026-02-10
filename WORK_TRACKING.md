@@ -12,9 +12,9 @@ Recommended status board columns:
 
 - RIS-STEP-001: DONE
 - RIS-STEP-002: DONE
-- RIS-STEP-003: TODO
+- RIS-STEP-003: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-002-shared-contracts`
+- `feature/ris-step-003-game-state-model`
