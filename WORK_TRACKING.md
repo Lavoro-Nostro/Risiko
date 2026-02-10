@@ -18,4 +18,4 @@ Recommended status board columns:
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-003-game-state-model`
+- `feature/ris-step-004-command-handlers`

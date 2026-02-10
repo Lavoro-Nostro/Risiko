@@ -2,5 +2,5 @@
 
 Holds map and rules content packs.
 
-Current placeholder:
+Current pack:
 - `maps/world-classic/`
