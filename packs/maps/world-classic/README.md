@@ -1,9 +1,9 @@
-# World Classic Pack (Placeholder)
+# World Classic Pack
 
-Planned files:
-- `map.svg`
-- `map.json`
-- `i18n/en.json`
-- `i18n/it.json`
+Current files:
+- `map.json` (complete classic territory graph: 42 territories, 6 continents, full adjacency)
+- `i18n/en.json` (complete territory labels)
+- `i18n/it.json` (complete territory labels)
 
-No final content included yet.
+Planned next:
+- `map.svg` with matching territory IDs for rendering
