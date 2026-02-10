@@ -28,8 +28,9 @@ Recommended status board columns:
 - RIS-STEP-016: DONE
 - RIS-STEP-017: DONE
 - RIS-STEP-018: DONE
+- RIS-STEP-019: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-018-baseline-animations`
+- `feature/ris-step-019-ux-hardening`

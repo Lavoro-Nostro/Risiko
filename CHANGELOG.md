@@ -22,6 +22,12 @@ Dates are in ISO format (`YYYY-MM-DD`).
 - Attack flash state (`under-attack`) tied to attack events.
 - Army badge pulse transitions on event-driven army changes.
 - Capture sweep animation triggered by `TerritoryCapturedEvent`.
+- RIS-STEP-019 UX hardening in `Risk.Web`:
+- Added stronger disabled-action guards for disconnected/loading/submitting states.
+- Added clearer rejection feedback with mapped validation reason labels.
+- Added state/event sync status indicators and sync-latency display.
+- Added loading overlay and reconnect warning overlay for sync disruptions.
+- Added structured command feedback severity styling (`success/error/info`).
 
 ### Changed
 - `Risk.Web` now submits turn commands directly to `Risk.Host` via `POST /api/matches/{matchId}/commands`.
@@ -35,6 +41,9 @@ Dates are in ISO format (`YYYY-MM-DD`).
 - `Risk.Web/src/App.tsx`
 - `Risk.Web/src/styles.css`
 - RIS-STEP-018:
+- `Risk.Web/src/App.tsx`
+- `Risk.Web/src/styles.css`
+- RIS-STEP-019:
 - `Risk.Web/src/App.tsx`
 - `Risk.Web/src/styles.css`
 
