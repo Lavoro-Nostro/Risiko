@@ -14,7 +14,7 @@ Write-Host "Starting host and web in separate terminals..."
 Start-Process powershell -ArgumentList @(
     "-NoExit",
     "-Command",
-    "Set-Location '$repoRoot'; dotnet run --project Risk.Host/Risk.Host.csproj"
+    "Set-Location '$repoRoot'; dotnet run --project Risk.Host/Risk.Host.csproj --urls http://localhost:5050"
 )
 
 Start-Process powershell -ArgumentList @(
