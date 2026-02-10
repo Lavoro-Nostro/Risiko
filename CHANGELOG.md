@@ -11,6 +11,11 @@ Dates are in ISO format (`YYYY-MM-DD`).
 - Fortify controls with source/target territory and army amount selector.
 - End turn action wired to host command endpoint.
 - Command feedback/status panel for accepted/rejected actions.
+- RIS-STEP-017 tactical context panels in `Risk.Web`:
+- Top player-order panel with active player highlight and per-player territory/army summary.
+- Current phase/turn/round summary panel.
+- Expanded territory detail panel.
+- Combat preview panel linked to selected attack source/target and dice settings.
 
 ### Changed
 - `Risk.Web` now submits turn commands directly to `Risk.Host` via `POST /api/matches/{matchId}/commands`.
@@ -18,6 +23,9 @@ Dates are in ISO format (`YYYY-MM-DD`).
 
 ### Code Traceability
 - RIS-STEP-016:
+- `Risk.Web/src/App.tsx`
+- `Risk.Web/src/styles.css`
+- RIS-STEP-017:
 - `Risk.Web/src/App.tsx`
 - `Risk.Web/src/styles.css`
 

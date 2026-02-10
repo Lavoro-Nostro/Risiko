@@ -16,6 +16,11 @@ Current scope:
 - Attack controls with source/target/dice selector
 - Fortify controls with source/target/army selector
 - End-turn action command
+- Tactical info panels implemented:
+- Top panel with player order and active player highlight
+- Current phase/turn/round summary
+- Territory detail panel
+- Combat preview panel
 
 Planned next milestones:
-- RIS-STEP-017 side/top tactical info panels
+- RIS-STEP-018 baseline combat/map animations
