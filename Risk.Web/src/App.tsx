@@ -18,8 +18,15 @@ type HostTerritoryState = {
   neighborTerritoryIds: string[];
 };
 
+type HostPlayerState = {
+  playerId: string;
+  displayName: string;
+  isEliminated: boolean;
+};
+
 type HostGameState = {
   matchId: string;
+  players: HostPlayerState[];
   phase: string;
   turnIndex: number;
   roundIndex: number;
@@ -151,6 +158,7 @@ function App() {
   const currentPhase = parsePhase(authoritativeState?.phase);
   const currentPlayerId = authoritativeState?.activePlayerId ?? "";
   const reinforcementPool = authoritativeState?.reinforcementsAvailable ?? 0;
+  const players = authoritativeState?.players ?? [];
   const selectedTerritory = selectedTerritoryId
     ? worldClassic.map.territories.find(territory => territory.id === selectedTerritoryId) ?? null
     : null;
@@ -192,6 +200,39 @@ function App() {
 
     return from.neighbors.filter(id => ownerByTerritoryId[id] === commandPlayerId);
   }, [fortifyFromId, commandPlayerId, ownerByTerritoryId]);
+  const playerSummaries = useMemo(() => {
+    if (!players.length) {
+      return [];
+    }
+
+    return players.map(player => {
+      let territoryCount = 0;
+      let totalArmies = 0;
+      Object.entries(ownerByTerritoryId).forEach(([territoryId, owner]) => {
+        if (owner !== player.playerId) {
+          return;
+        }
+
+        territoryCount += 1;
+        totalArmies += armyByTerritoryId[territoryId] ?? 0;
+      });
+
+      return {
+        ...player,
+        territoryCount,
+        totalArmies
+      };
+    });
+  }, [armyByTerritoryId, ownerByTerritoryId, players]);
+  const activePlayer = useMemo(
+    () => players.find(player => player.playerId === currentPlayerId) ?? null,
+    [currentPlayerId, players]
+  );
+  const attackFromArmies = attackFromId ? armyByTerritoryId[attackFromId] ?? 0 : 0;
+  const attackToArmies = attackToId ? armyByTerritoryId[attackToId] ?? 0 : 0;
+  const maxAttackerDice = Math.min(3, Math.max(0, attackFromArmies - 1));
+  const defenderDice = Math.min(2, Math.max(0, attackToArmies));
+  const combatComparisons = Math.min(attackDice, defenderDice);
 
   const fetchAuthoritativeState = useCallback(async () => {
     const response = await fetch(
@@ -298,6 +339,17 @@ function App() {
       setFortifyToId(fortifyTargets[0]);
     }
   }, [fortifyTargets, fortifyToId]);
+
+  useEffect(() => {
+    if (maxAttackerDice <= 0) {
+      setAttackDice(1);
+      return;
+    }
+
+    if (attackDice > maxAttackerDice) {
+      setAttackDice(maxAttackerDice);
+    }
+  }, [attackDice, maxAttackerDice]);
 
   useEffect(() => {
     const root = mapRootRef.current;
@@ -448,6 +500,43 @@ function App() {
         <p>{territoryCount} territori caricati da pack dati e SVG.</p>
       </header>
 
+      <section className="top-info-grid">
+        <article className="top-info-card">
+          <h2>Match Snapshot</h2>
+          <p>Match: {authoritativeState?.matchId ?? "-"}</p>
+          <p>Round: {authoritativeState?.roundIndex ?? "-"}</p>
+          <p>Turn: {authoritativeState?.turnIndex ?? "-"}</p>
+          <p>Phase: {authoritativeState?.phase ?? "-"}</p>
+          <p>Active: {(activePlayer?.displayName ?? currentPlayerId) || "-"}</p>
+        </article>
+
+        <article className="top-info-card">
+          <h2>Player Order</h2>
+          {playerSummaries.length === 0 ? (
+            <p>No player data yet.</p>
+          ) : (
+            <ul className="player-order-list">
+              {playerSummaries.map(player => (
+                <li
+                  key={player.playerId}
+                  className={
+                    player.playerId === currentPlayerId
+                      ? "player-order-item is-active-player"
+                      : "player-order-item"
+                  }
+                >
+                  <span className="player-dot" style={{ backgroundColor: ownerColor(player.playerId) }} />
+                  <span>{player.displayName}</span>
+                  <span className="player-metrics">
+                    {player.territoryCount} terr. / {player.totalArmies} armate
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      </section>
+
       {validationErrors.length > 0 && (
         <section className="error-panel" aria-live="polite">
           <h2>Errori di binding pack</h2>
@@ -592,16 +681,24 @@ function App() {
               <input
                 type="number"
                 min={1}
-                max={3}
+                max={Math.max(1, maxAttackerDice)}
                 value={attackDice}
                 onChange={event =>
-                  setAttackDice(Math.min(3, Math.max(1, Number(event.target.value) || 1)))
+                  setAttackDice(
+                    Math.min(Math.max(1, maxAttackerDice), Math.max(1, Number(event.target.value) || 1))
+                  )
                 }
               />
             </label>
             <button
               type="button"
-              disabled={currentPhase !== "attack" || !attackFromId || !attackToId}
+              disabled={
+                currentPhase !== "attack" ||
+                !attackFromId ||
+                !attackToId ||
+                maxAttackerDice <= 0 ||
+                defenderDice <= 0
+              }
               onClick={() =>
                 submitCommand("Attack", {
                   fromTerritoryId: attackFromId,
@@ -702,6 +799,50 @@ function App() {
           className="map-canvas"
           dangerouslySetInnerHTML={{ __html: worldClassic.svg }}
         />
+
+        <aside className="territory-panel tactical-panel">
+          <h2>Tactical Context</h2>
+          <div className="action-section">
+            <h3>Current Phase</h3>
+            <p className="phase-pill">{authoritativeState?.phase ?? "-"}</p>
+            <p>Active player: {(activePlayer?.displayName ?? currentPlayerId) || "-"}</p>
+            <p>Reinforcements: {reinforcementPool}</p>
+          </div>
+
+          <div className="action-section">
+            <h3>Territory Detail</h3>
+            {selectedTerritory ? (
+              <>
+                <p>Name: {labelForTerritory(selectedTerritory.id)}</p>
+                <p>Owner: {selectedOwner ?? "neutral"}</p>
+                <p>Armies: {selectedArmies}</p>
+                <p>Neighbors: {selectedTerritory.neighbors.length}</p>
+              </>
+            ) : (
+              <p>Select a territory to inspect details.</p>
+            )}
+          </div>
+
+          <div className="action-section">
+            <h3>Combat Preview</h3>
+            {attackFromId && attackToId ? (
+              <>
+                <p>
+                  Attacker: {labelForTerritory(attackFromId)} ({attackFromArmies} armies)
+                </p>
+                <p>
+                  Defender: {labelForTerritory(attackToId)} ({attackToArmies} armies)
+                </p>
+                <p>Attacker dice: {attackDice}</p>
+                <p>Defender dice: {defenderDice}</p>
+                <p>Dice comparisons: {combatComparisons}</p>
+                <p>Max attacker dice allowed: {maxAttackerDice}</p>
+              </>
+            ) : (
+              <p>Pick attack source and target for preview.</p>
+            )}
+          </div>
+        </aside>
       </section>
     </main>
   );

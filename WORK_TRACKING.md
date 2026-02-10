@@ -26,8 +26,9 @@ Recommended status board columns:
 - RIS-STEP-014: DONE
 - RIS-STEP-015: DONE
 - RIS-STEP-016: DONE
+- RIS-STEP-017: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-016-turn-phase-controls`
+- `feature/ris-step-017-tactical-info-panels`
