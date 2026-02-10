@@ -39,3 +39,9 @@ All notable changes to this project will be documented here.
 - Added continent bonus reinforcement coverage for end-turn progression
 - Added `ContinentState` to GameState and integrated continent bonuses in reinforcement calculation
 - Expanded engine automated coverage to 26 passing tests
+- RIS-STEP-007 map-pack loader completed:
+- Added `MapPackLoader` with JSON deserialization from map pack directory
+- Added strict map validation (duplicate IDs, unknown references, asymmetric adjacency, invalid continent references)
+- Added map pack domain models (`MapPack`, `MapTerritory`, `MapContinent`, validation result)
+- Added `Risk.Engine.Tests/MapPackLoaderTests.cs` including world-classic load/validate checks
+- Expanded engine automated coverage to 30 passing tests
