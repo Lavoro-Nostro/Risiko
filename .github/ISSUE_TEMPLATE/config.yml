@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Support
+    url: https://github.com/Lavoro-Nostro/Risiko/blob/main/SUPPORT.md
+    about: Read support options and reporting guidance.

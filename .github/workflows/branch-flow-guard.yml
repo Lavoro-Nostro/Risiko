@@ -1,0 +1,36 @@
+name: Branch Flow Guard
+
+on:
+  pull_request:
+    branches: [dev, main, stable]
+
+jobs:
+  validate-branch-flow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate source -> target branch policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          head="${{ github.head_ref }}"
+          base="${{ github.base_ref }}"
+
+          echo "Checking PR flow: $head -> $base"
+
+          case "$head" in
+            feature/*|fix/*)
+              [[ "$base" == "dev" ]] || { echo "feature/* and fix/* must target dev"; exit 1; }
+              ;;
+            hotfix/*)
+              [[ "$base" == "stable" ]] || { echo "hotfix/* must target stable"; exit 1; }
+              ;;
+            dev)
+              [[ "$base" == "main" ]] || { echo "dev must target main"; exit 1; }
+              ;;
+            main)
+              [[ "$base" == "stable" ]] || { echo "main must target stable"; exit 1; }
+              ;;
+            *)
+              echo "No strict policy for branch '$head'; allowed by default."
+              ;;
+          esac

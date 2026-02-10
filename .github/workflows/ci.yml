@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main, stable]
+  pull_request:
+    branches: [dev, main, stable]
+
+jobs:
+  repo-health:
+    name: Repository Health Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate required project files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            "README.md"
+            "LICENSE"
+            "RISIKO_MASTER_PLAN.md"
+            "WORK_TRACKING.md"
+            "CONTRIBUTING.md"
+            "CODE_OF_CONDUCT.md"
+            "SECURITY.md"
+            "SUPPORT.md"
+          )
+          for f in "${required[@]}"; do
+            if [[ ! -f "$f" ]]; then
+              echo "Missing required file: $f"
+              exit 1
+            fi
+          done
+
+      - name: Ensure legacy filename not referenced
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R --line-number --exclude-dir=.git -E "\bPFC\b" .; then
+            echo "Found legacy 'PFC' references; use RISIKO_MASTER_PLAN.md"
+            exit 1
+          fi
+
+  optional-build-check:
+    name: Optional Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        if: ${{ hashFiles('**/*.sln', '**/*.csproj') != '' }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build .NET projects (if present)
+        if: ${{ hashFiles('**/*.sln', '**/*.csproj') != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ls *.sln >/dev/null 2>&1; then
+            dotnet build --configuration Release
+          else
+            find . -name "*.csproj" -print0 | xargs -0 -n1 dotnet build --configuration Release
+          fi
+
+      - name: Setup Node.js
+        if: ${{ hashFiles('**/package.json') != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install frontend dependencies (if present)
+        if: ${{ hashFiles('**/package.json') != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f package-lock.json ]]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Run frontend checks (if scripts exist)
+        if: ${{ hashFiles('**/package.json') != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run -s lint --if-present
+          npm run -s test --if-present
+          npm run -s build --if-present
