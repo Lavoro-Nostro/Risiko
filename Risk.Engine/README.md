@@ -1,4 +1,8 @@
-# Engine Module (Structure Only)
+# Engine Module
+
+Current state:
+- .NET class library scaffold created
+- Buildable project with no gameplay logic yet
 
 Planned contents:
 - Domain entities
@@ -6,5 +10,3 @@ Planned contents:
 - Event reducers
 - Rule validation
 - Unit tests
-
-No implementation code in this stage.

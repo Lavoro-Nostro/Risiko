@@ -39,6 +39,32 @@ Detailed plan: `RISIKO_MASTER_PLAN.md`
 - `packs/` -> map/content pack structure
 - `assets/` -> non-code resources
 
+## Getting Started
+
+Prerequisites:
+- .NET SDK 10+
+- Node.js 20+ (for `Risk.Web`)
+
+Build backend modules:
+
+```bash
+dotnet build Risiko.slnx -c Release
+```
+
+Run host module:
+
+```bash
+dotnet run --project Risk.Host/Risk.Host.csproj
+```
+
+Run web module:
+
+```bash
+cd Risk.Web
+npm install
+npm run dev
+```
+
 ## Branching Strategy
 
 - `dev` -> active integration
