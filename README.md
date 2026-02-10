@@ -45,6 +45,24 @@ Prerequisites:
 - .NET SDK 10+
 - Node.js 20+ (for `Risk.Web`)
 
+Quick setup:
+
+```powershell
+./scripts/install-deps.ps1
+```
+
+Run web app only:
+
+```powershell
+./scripts/run-web.ps1
+```
+
+Run host + web together (two terminals):
+
+```powershell
+./scripts/run-dev.ps1
+```
+
 Build backend modules:
 
 ```bash
