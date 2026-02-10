@@ -4,8 +4,8 @@ Host-authoritative, web-first strategy game inspired by classic Risk.
 
 ## Project Status
 
-The repository is currently in a docs-first planning phase.
-Core architecture, workflow, and quality gates are defined before gameplay implementation starts.
+Foundation implementation is in progress.
+Core engine, host command flow, room/reconnect lifecycle, and first web map rendering are working with automated tests.
 
 ## Vision
 
@@ -73,6 +73,13 @@ Run automated tests:
 
 ```bash
 dotnet test Risiko.slnx -c Release
+```
+
+Run frontend pack-binding tests:
+
+```bash
+cd Risk.Web
+npm test
 ```
 
 Run host module:

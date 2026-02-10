@@ -22,8 +22,9 @@ Recommended status board columns:
 - RIS-STEP-010: DONE
 - RIS-STEP-011: DONE
 - RIS-STEP-012: DONE
+- RIS-STEP-013: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-012-reconnect-support`
+- `feature/ris-step-013-web-svg-map-rendering`

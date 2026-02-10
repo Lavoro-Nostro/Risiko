@@ -1,5 +1,15 @@
 :root {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  --bg-0: #f3efe5;
+  --bg-1: #d7e4f0;
+  --ink: #1c2228;
+  --ink-muted: #4a5b6a;
+  --panel: #ffffff;
+  --line: #c8d3de;
+  --accent: #cf3a2b;
+  --territory: #d8e7ff;
+  --territory-stroke: #244872;
+  --territory-selected: #ffd95d;
+  font-family: "Lato", "Trebuchet MS", sans-serif;
 }
 
 * {
@@ -8,24 +18,124 @@
 
 body {
   margin: 0;
-  background: linear-gradient(180deg, #111 0%, #1e222a 100%);
-  color: #f5f5f5;
+  background:
+    radial-gradient(circle at top left, #fcf7d8 0%, transparent 38%),
+    radial-gradient(circle at bottom right, #d3f0ff 0%, transparent 34%),
+    linear-gradient(180deg, var(--bg-0), var(--bg-1));
+  color: var(--ink);
 }
 
-.shell {
+.app-shell {
   min-height: 100vh;
+  padding: 1.25rem;
   display: grid;
-  place-content: center;
-  text-align: center;
-  gap: 0.75rem;
-  padding: 2rem;
+  gap: 1rem;
 }
 
-h1 {
-  margin: 0;
+.app-header {
+  background: color-mix(in srgb, var(--panel) 92%, #f9d4b3 8%);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
 }
 
-p {
+.app-header h1 {
   margin: 0;
-  opacity: 0.85;
+  font-size: 1.5rem;
+  line-height: 1.15;
+}
+
+.app-header p {
+  margin: 0.4rem 0 0;
+  color: var(--ink-muted);
+}
+
+.error-panel {
+  border: 1px solid #d84d39;
+  background: #fff3f0;
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+}
+
+.error-panel h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.1rem;
+  color: #b42f1d;
+}
+
+.error-panel ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.map-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.territory-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.territory-panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.territory-panel p {
+  margin: 0.4rem 0;
+  color: var(--ink-muted);
+}
+
+.map-canvas {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.7rem;
+  overflow: auto;
+}
+
+.map-canvas svg {
+  width: 100%;
+  min-width: 980px;
+  height: auto;
+  display: block;
+}
+
+.map-canvas .territory-node {
+  cursor: pointer;
+  transition: transform 130ms ease;
+}
+
+.map-canvas .territory-node rect {
+  fill: var(--territory) !important;
+  stroke: var(--territory-stroke) !important;
+}
+
+.map-canvas .territory-node:hover rect {
+  fill: #d3ffd9 !important;
+}
+
+.map-canvas .territory-node:focus-visible rect,
+.map-canvas .territory-node.is-selected rect {
+  fill: var(--territory-selected) !important;
+  stroke: var(--accent) !important;
+  stroke-width: 3 !important;
+}
+
+.map-canvas .territory-node text {
+  pointer-events: none;
+}
+
+@media (max-width: 980px) {
+  .map-layout {
+    grid-template-columns: 1fr;
+  }
 }
