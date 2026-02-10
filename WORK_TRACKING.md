@@ -11,10 +11,10 @@ Recommended status board columns:
 ## Current Sprint Snapshot
 
 - RIS-STEP-001: DONE
-- RIS-STEP-002: TODO
+- RIS-STEP-002: IN_PROGRESS
 - RIS-STEP-003: TODO
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-001-solution-scaffold`
+- `feature/ris-step-002-shared-contracts`
