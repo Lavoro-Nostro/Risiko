@@ -48,6 +48,30 @@ type SubmitCommandResponse = {
   appliedEventCount: number;
 };
 
+type HostEventMessage = {
+  sequence: number;
+  roomId: string;
+  hostPeerId: string;
+  type: string;
+  payload: string;
+  createdAtUtc: string;
+};
+
+type AttackResolvedPayload = {
+  fromTerritoryId: string;
+  toTerritoryId: string;
+  attackerLosses: number;
+  defenderLosses: number;
+};
+
+type ReinforcementsPlacedPayload = {
+  territoryId: string;
+};
+
+type TerritoryCapturedPayload = {
+  territoryId: string;
+};
+
 const OWNER_COLORS = ["#e8a8a8", "#a8c5f5", "#afe1b0", "#f0c286", "#c8b0e7", "#94ddd3"];
 
 function ownerColor(ownerPlayerId: string): string {
@@ -110,12 +134,25 @@ function upsertArmyOverlay(territoryNode: SVGGElement, armies: number): void {
   }
 }
 
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function parseEventPayload<T>(payload: string): T | null {
+  try {
+    return JSON.parse(payload) as T;
+  } catch {
+    return null;
+  }
+}
+
 function App() {
   const mapRootRef = useRef<HTMLDivElement>(null);
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string | null>(null);
   const [hoveredTerritoryId, setHoveredTerritoryId] = useState<string | null>(null);
   const [hostUrl, setHostUrl] = useState("http://localhost:5050");
   const [matchId, setMatchId] = useState("");
+  const [roomId, setRoomId] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string>("-");
@@ -131,6 +168,18 @@ function App() {
   const [fortifyToId, setFortifyToId] = useState("");
   const [fortifyArmies, setFortifyArmies] = useState(1);
   const [commandStatus, setCommandStatus] = useState<string>("-");
+  const [lastEventSequence, setLastEventSequence] = useState(0);
+  const [lastEventType, setLastEventType] = useState("-");
+  const [underAttackTerritoryId, setUnderAttackTerritoryId] = useState<string | null>(null);
+  const [capturedTerritoryId, setCapturedTerritoryId] = useState<string | null>(null);
+  const [recentArmyChangeIds, setRecentArmyChangeIds] = useState<string[]>([]);
+  const [diceRolling, setDiceRolling] = useState(false);
+  const [dicePreview, setDicePreview] = useState({
+    attacker: 1,
+    defender: 1,
+    attackerLosses: 0,
+    defenderLosses: 0
+  });
   const validationErrors = useMemo(() => validateWorldClassicBinding(), []);
   const territoryCount = worldClassic.map.territories.length;
   const ownerByTerritoryId = useMemo<Record<string, string>>(() => {
@@ -234,6 +283,83 @@ function App() {
   const defenderDice = Math.min(2, Math.max(0, attackToArmies));
   const combatComparisons = Math.min(attackDice, defenderDice);
 
+  const pulseArmyChange = useCallback((territoryIds: string[]) => {
+    if (!territoryIds.length) {
+      return;
+    }
+
+    setRecentArmyChangeIds(current => Array.from(new Set([...current, ...territoryIds])));
+    setTimeout(() => {
+      setRecentArmyChangeIds(current => current.filter(id => !territoryIds.includes(id)));
+    }, 800);
+  }, []);
+
+  const animateDiceRoll = useCallback(async (attackerLosses: number, defenderLosses: number) => {
+    setDiceRolling(true);
+    for (let i = 0; i < 6; i += 1) {
+      setDicePreview(current => ({
+        ...current,
+        attacker: 1 + Math.floor(Math.random() * 6),
+        defender: 1 + Math.floor(Math.random() * 6)
+      }));
+      await sleep(80);
+    }
+
+    setDicePreview(current => ({
+      ...current,
+      attacker: Math.max(1, 6 - attackerLosses),
+      defender: Math.max(1, 6 - defenderLosses),
+      attackerLosses,
+      defenderLosses
+    }));
+    await sleep(280);
+    setDiceRolling(false);
+  }, []);
+
+  const processHostEvents = useCallback(
+    async (events: HostEventMessage[]) => {
+      for (const event of events) {
+        setLastEventSequence(event.sequence);
+        setLastEventType(event.type);
+
+        if (event.type === "AttackResolvedEvent") {
+          const payload = parseEventPayload<AttackResolvedPayload>(event.payload);
+          if (payload) {
+            setUnderAttackTerritoryId(payload.toTerritoryId);
+            pulseArmyChange([payload.fromTerritoryId, payload.toTerritoryId]);
+            await animateDiceRoll(payload.attackerLosses, payload.defenderLosses);
+            setTimeout(() => {
+              setUnderAttackTerritoryId(current =>
+                current === payload.toTerritoryId ? null : current
+              );
+            }, 750);
+          }
+        }
+
+        if (event.type === "ReinforcementsPlacedEvent") {
+          const payload = parseEventPayload<ReinforcementsPlacedPayload>(event.payload);
+          if (payload) {
+            pulseArmyChange([payload.territoryId]);
+          }
+        }
+
+        if (event.type === "TerritoryCapturedEvent") {
+          const payload = parseEventPayload<TerritoryCapturedPayload>(event.payload);
+          if (payload) {
+            setCapturedTerritoryId(payload.territoryId);
+            pulseArmyChange([payload.territoryId]);
+            setTimeout(() => {
+              setCapturedTerritoryId(current => (current === payload.territoryId ? null : current));
+            }, 1300);
+          }
+        }
+
+        await sleep(100);
+      }
+    },
+    [animateDiceRoll, pulseArmyChange]
+  );
+
   const fetchAuthoritativeState = useCallback(async () => {
     const response = await fetch(
       `${hostUrl.replace(/\/$/, "")}/api/matches/${encodeURIComponent(matchId.trim())}/state`
@@ -245,6 +371,7 @@ function App() {
 
     const payload = (await response.json()) as MatchStateResponse;
     setAuthoritativeState(payload.state);
+    setRoomId(payload.roomId);
     setLoadError(null);
     setLastSyncTime(new Date().toLocaleTimeString());
   }, [hostUrl, matchId]);
@@ -290,6 +417,41 @@ function App() {
       clearInterval(interval);
     };
   }, [fetchAuthoritativeState, isConnected, matchId]);
+
+  useEffect(() => {
+    if (!isConnected || !roomId || !peerId) {
+      return;
+    }
+
+    let cancelled = false;
+    const fetchEvents = async () => {
+      try {
+        const response = await fetch(
+          `${hostUrl.replace(/\/$/, "")}/api/rooms/${encodeURIComponent(roomId)}/peers/${encodeURIComponent(peerId)}/events?after=${lastEventSequence}`
+        );
+        if (!response.ok) {
+          return;
+        }
+
+        const events = (await response.json()) as HostEventMessage[];
+        if (cancelled || !events.length) {
+          return;
+        }
+
+        const ordered = [...events].sort((a, b) => a.sequence - b.sequence);
+        await processHostEvents(ordered);
+      } catch {
+        // keep UI resilient if host event polling temporarily fails
+      }
+    };
+
+    fetchEvents();
+    const interval = setInterval(fetchEvents, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [hostUrl, isConnected, lastEventSequence, peerId, processHostEvents, roomId]);
 
   useEffect(() => {
     if (!currentPlayerId) {
@@ -426,9 +588,13 @@ function App() {
         ownerByTerritoryId,
         selectableTerritoryIds,
         neighborTerritoryIds,
-        underAttackTerritoryId: null,
-        capturedTerritoryId: null
+        underAttackTerritoryId,
+        capturedTerritoryId
       });
+
+      if (recentArmyChangeIds.includes(territoryId)) {
+        classes.push("is-army-updated");
+      }
 
       territoryNode.setAttribute("class", classes.join(" "));
       territoryNode.style.setProperty("--owner-color", ownerColor(owner));
@@ -441,7 +607,10 @@ function App() {
     neighborTerritoryIds,
     currentPlayerId,
     ownerByTerritoryId,
-    armyByTerritoryId
+    armyByTerritoryId,
+    underAttackTerritoryId,
+    capturedTerritoryId,
+    recentArmyChangeIds
   ]);
   const selectedOwner = selectedTerritoryId
     ? ownerByTerritoryId[selectedTerritoryId] ?? "neutral"
@@ -582,6 +751,12 @@ function App() {
                 setIsConnected(false);
                 setAuthoritativeState(null);
                 setLoadError(null);
+                setRoomId("");
+                setLastEventSequence(0);
+                setLastEventType("-");
+                setUnderAttackTerritoryId(null);
+                setCapturedTerritoryId(null);
+                setRecentArmyChangeIds([]);
               }}
             >
               Disconnetti
@@ -595,6 +770,7 @@ function App() {
           <p>Fase: {authoritativeState?.phase ?? "-"}</p>
           <p>Giocatore attivo: {currentPlayerId || "-"}</p>
           <p>Rinforzi disponibili: {reinforcementPool}</p>
+          <p>Room ID: {roomId || "-"}</p>
           {loadError && <p className="sync-error">{loadError}</p>}
 
           <h2>Identita Comando</h2>
@@ -807,6 +983,8 @@ function App() {
             <p className="phase-pill">{authoritativeState?.phase ?? "-"}</p>
             <p>Active player: {(activePlayer?.displayName ?? currentPlayerId) || "-"}</p>
             <p>Reinforcements: {reinforcementPool}</p>
+            <p>Last event seq: {lastEventSequence}</p>
+            <p>Last event type: {lastEventType}</p>
           </div>
 
           <div className="action-section">
@@ -837,6 +1015,13 @@ function App() {
                 <p>Defender dice: {defenderDice}</p>
                 <p>Dice comparisons: {combatComparisons}</p>
                 <p>Max attacker dice allowed: {maxAttackerDice}</p>
+                <div className={diceRolling ? "dice-roll-panel is-rolling" : "dice-roll-panel"}>
+                  <span className="dice-face attacker">{dicePreview.attacker}</span>
+                  <span className="dice-face defender">{dicePreview.defender}</span>
+                </div>
+                <p>
+                  Losses {"->"} attacker: {dicePreview.attackerLosses}, defender: {dicePreview.defenderLosses}
+                </p>
               </>
             ) : (
               <p>Pick attack source and target for preview.</p>

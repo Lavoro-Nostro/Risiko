@@ -355,7 +355,11 @@ body {
 .map-canvas .territory-node.is-captured rect {
   fill: #abf5d1 !important;
   stroke: #1b8a5f !important;
-  animation: pulse-capture 900ms ease-in-out 3;
+  animation: pulse-capture 900ms ease-in-out 3, capture-sweep 900ms ease-out 1;
+}
+
+.map-canvas .territory-node.is-army-updated .army-badge-bg {
+  animation: pulse-army 720ms ease-out 1;
 }
 
 .map-canvas .territory-node text {
@@ -376,6 +380,37 @@ body {
   fill: #ffffff;
   font-size: 10px;
   font-weight: 700;
+}
+
+.dice-roll-panel {
+  margin-top: 0.45rem;
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.dice-face {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid #2f3d4a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+  background: #fff;
+}
+
+.dice-face.attacker {
+  background: #ffe0dc;
+}
+
+.dice-face.defender {
+  background: #dce8ff;
+}
+
+.dice-roll-panel.is-rolling .dice-face {
+  animation: dice-bounce 140ms ease-in-out infinite alternate;
 }
 
 @keyframes pulse-attack {
@@ -399,6 +434,39 @@ body {
   }
   100% {
     transform: translateY(0);
+  }
+}
+
+@keyframes capture-sweep {
+  0% {
+    filter: brightness(1);
+  }
+  45% {
+    filter: brightness(1.3);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+@keyframes pulse-army {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.23);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes dice-bounce {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-2px);
   }
 }
 
