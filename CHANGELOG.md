@@ -61,3 +61,10 @@ All notable changes to this project will be documented here.
 - Added explicit command rejection responses with `CommandErrorCode` reason codes
 - Added `Risk.Host.Tests/CommandFlowApiTests.cs` integration tests for accepted and rejected command paths
 - Expanded total automated coverage to 38 passing tests
+- RIS-STEP-011 room and match lifecycle completed:
+- Added room lifecycle service in `Risk.Host` with create/join/leave/start flows
+- Added room lifecycle APIs: `POST /api/rooms`, `POST /api/rooms/{roomId}/join`, `POST /api/rooms/{roomId}/leave`, `POST /api/rooms/{roomId}/start`
+- Added map-aware match start using `mapId` and `MapPackLoader` validation
+- Added deterministic initial player/territory setup when starting a room match
+- Added `Risk.Host.Tests/RoomLifecycleApiTests.cs` integration tests for room lifecycle and start-match flow
+- Expanded total automated coverage to 41 passing tests

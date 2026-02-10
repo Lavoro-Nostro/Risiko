@@ -6,6 +6,8 @@ Current state:
 - Host-authoritative command flow implemented with in-memory match sessions
 - Match initialize and command submit endpoints wired to `Risk.Engine`
 - Rejected commands return explicit `CommandErrorCode` reason codes
+- Room lifecycle endpoints implemented (create/join/leave/start match)
+- Room start supports `mapId` selection and starts an active authoritative match session
 - Buildable with integration tests (`Risk.Host.Tests`)
 
 Planned contents:

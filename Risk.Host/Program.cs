@@ -1,9 +1,12 @@
 using Risk.Host.Gameplay;
 using Risk.Host.Networking;
+using Risk.Engine.Packs;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<ISignalingService, InMemorySignalingService>();
 builder.Services.AddSingleton<IMatchSessionService, InMemoryMatchSessionService>();
+builder.Services.AddSingleton<MapPackLoader>();
+builder.Services.AddSingleton<IRoomSessionService, InMemoryRoomSessionService>();
 
 var app = builder.Build();
 
@@ -87,6 +90,77 @@ app.MapPost("/api/matches/{matchId}/commands",
         return response.Accepted
             ? Results.Ok(response)
             : Results.Conflict(response);
+    });
+
+app.MapPost("/api/rooms",
+    (CreateRoomRequest request, IRoomSessionService rooms) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.HostPeerId) ||
+            string.IsNullOrWhiteSpace(request.HostDisplayName) ||
+            string.IsNullOrWhiteSpace(request.MapId))
+        {
+            return Results.BadRequest("hostPeerId, hostDisplayName and mapId are required.");
+        }
+
+        var room = rooms.CreateRoom(request);
+        return Results.Ok(room);
+    });
+
+app.MapPost("/api/rooms/{roomId}/join",
+    (string roomId, JoinRoomRequest request, IRoomSessionService rooms) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.PeerId) || string.IsNullOrWhiteSpace(request.DisplayName))
+        {
+            return Results.BadRequest("peerId and displayName are required.");
+        }
+
+        try
+        {
+            var room = rooms.JoinRoom(roomId, request);
+            return Results.Ok(room);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.Conflict(new { message = ex.Message });
+        }
+    });
+
+app.MapPost("/api/rooms/{roomId}/leave",
+    (string roomId, LeaveRoomRequest request, IRoomSessionService rooms) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.PeerId))
+        {
+            return Results.BadRequest("peerId is required.");
+        }
+
+        try
+        {
+            var room = rooms.LeaveRoom(roomId, request);
+            return Results.Ok(room);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.Conflict(new { message = ex.Message });
+        }
+    });
+
+app.MapPost("/api/rooms/{roomId}/start",
+    async (string roomId, StartMatchRequest request, IRoomSessionService rooms, CancellationToken cancellationToken) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.HostPeerId))
+        {
+            return Results.BadRequest("hostPeerId is required.");
+        }
+
+        try
+        {
+            var match = await rooms.StartMatchAsync(roomId, request, cancellationToken);
+            return Results.Ok(match);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.Conflict(new { message = ex.Message });
+        }
     });
 
 app.Run();
