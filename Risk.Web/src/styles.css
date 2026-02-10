@@ -96,6 +96,7 @@ body {
   font-size: 0.9rem;
 }
 
+.field input,
 .field select {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -170,9 +171,18 @@ body {
   background: #9bf4c9;
 }
 
+.legend-item.neighbor::before {
+  background: #fff8cf;
+}
+
 .territory-panel p {
   margin: 0.4rem 0;
   color: var(--ink-muted);
+}
+
+.sync-error {
+  color: #b22626;
+  font-weight: 600;
 }
 
 .map-canvas {
@@ -196,7 +206,7 @@ body {
 }
 
 .map-canvas .territory-node rect {
-  fill: var(--territory) !important;
+  fill: var(--owner-color, var(--territory)) !important;
   stroke: var(--territory-stroke) !important;
   transition: fill 160ms ease, stroke 160ms ease, stroke-width 120ms ease;
 }
@@ -211,21 +221,14 @@ body {
   stroke: #5e6974 !important;
 }
 
-.map-canvas .territory-node.owner-player-1.is-owned rect {
-  fill: #ffd0cb !important;
-}
-
-.map-canvas .territory-node.owner-player-2.is-owned rect {
-  fill: #c7dbff !important;
-}
-
-.map-canvas .territory-node.owner-player-3.is-owned rect {
-  fill: #c7f4c9 !important;
-}
-
 .map-canvas .territory-node.is-selectable rect {
   stroke-width: 3 !important;
   stroke-dasharray: 6 4;
+}
+
+.map-canvas .territory-node.is-neighbor rect {
+  stroke: #9a7b08 !important;
+  stroke-width: 3 !important;
 }
 
 .map-canvas .territory-node:focus-visible rect,
@@ -250,6 +253,22 @@ body {
 
 .map-canvas .territory-node text {
   pointer-events: none;
+}
+
+.map-canvas .territory-node .army-overlay {
+  pointer-events: none;
+}
+
+.map-canvas .territory-node .army-badge-bg {
+  fill: #1d2630;
+  stroke: #fff;
+  stroke-width: 1.2;
+}
+
+.map-canvas .territory-node .army-badge {
+  fill: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 @keyframes pulse-attack {

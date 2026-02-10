@@ -50,3 +50,9 @@ public sealed record ReconnectResponse(
     string RoomId,
     IReadOnlyList<HostEventMessage> MissingEvents
 );
+
+public sealed record MatchStateResponse(
+    string MatchId,
+    string RoomId,
+    GameState State
+);

@@ -9,6 +9,8 @@ Current scope:
 - Pack binding tests with Vitest
 - Territory visual states with class-driven styling:
 - `neutral`, `owned`, `hover`, `selectable`, `selected`, `under-attack`, `captured`
+- Host-authoritative state binding for map owner colors and army overlays
+- Polling sync from `Risk.Host` match snapshot endpoint
 
 Planned next milestones:
-- RIS-STEP-015 host-authoritative event binding
+- RIS-STEP-016 turn phase controls

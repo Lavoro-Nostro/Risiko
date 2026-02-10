@@ -9,6 +9,7 @@ export type TerritoryVisualContext = {
   currentPlayerId: string;
   ownerByTerritoryId: Record<string, string>;
   selectableTerritoryIds: Set<string>;
+  neighborTerritoryIds: Set<string>;
   underAttackTerritoryId: string | null;
   capturedTerritoryId: string | null;
 };
@@ -72,7 +73,8 @@ export function computeSelectableTerritoryIds(
 
 export function classListForTerritory(context: TerritoryVisualContext): string[] {
   const ownerId = context.ownerByTerritoryId[context.territoryId] ?? "neutral";
-  const classes = ["territory-node", `owner-${ownerId}`];
+  const ownerClass = ownerId.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
+  const classes = ["territory-node", `owner-${ownerClass}`];
 
   if (ownerId === "neutral") {
     classes.push("is-neutral");
@@ -90,6 +92,10 @@ export function classListForTerritory(context: TerritoryVisualContext): string[]
 
   if (context.selectableTerritoryIds.has(context.territoryId)) {
     classes.push("is-selectable");
+  }
+
+  if (context.neighborTerritoryIds.has(context.territoryId)) {
+    classes.push("is-neighbor");
   }
 
   if (context.underAttackTerritoryId === context.territoryId) {

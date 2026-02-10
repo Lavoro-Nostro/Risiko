@@ -124,6 +124,19 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
         }
     }
 
+    public MatchStateResponse? GetMatchState(string matchId)
+    {
+        if (!_matches.TryGetValue(matchId, out var session))
+        {
+            return null;
+        }
+
+        lock (session.Sync)
+        {
+            return new MatchStateResponse(matchId, session.RoomId, session.State);
+        }
+    }
+
     private static IGameCommand? BuildCommand(string matchId, SubmitCommandRequest request)
     {
         try

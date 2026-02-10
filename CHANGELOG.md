@@ -87,3 +87,10 @@ All notable changes to this project will be documented here.
 - Added state and transition styling in `Risk.Web/src/styles.css`
 - Added interactive demo controls in `Risk.Web/src/App.tsx` for phase/player/combat markers
 - Added Vitest suite `Risk.Web/src/map/territoryVisualState.test.ts` for state logic coverage
+- RIS-STEP-015 host-authoritative state binding completed:
+- Added authoritative state snapshot API in `Risk.Host`: `GET /api/matches/{matchId}/state`
+- Added match-state retrieval support in match session service contracts/implementation
+- Added host integration test coverage for authoritative state endpoint
+- Updated `Risk.Web` map binding to poll host state and render owner colors from authoritative territory ownership
+- Added authoritative army count overlays on map territories
+- Added selected-territory neighbor highlighting from map adjacency with state-driven classes

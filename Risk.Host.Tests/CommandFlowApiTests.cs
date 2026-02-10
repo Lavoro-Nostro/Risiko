@@ -95,6 +95,43 @@ public class CommandFlowApiTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Empty(events!);
     }
 
+    [Fact]
+    public async Task MatchStateEndpoint_ReturnsAuthoritativeStateSnapshot()
+    {
+        var matchId = "match-12";
+        var roomId = "room-12";
+
+        var initResponse = await _client.PostAsJsonAsync(
+            $"/api/matches/{matchId}/initialize",
+            BuildInitializeRequest(roomId));
+        initResponse.EnsureSuccessStatusCode();
+
+        var submitResponse = await _client.PostAsJsonAsync(
+            $"/api/matches/{matchId}/commands",
+            new SubmitCommandRequest(
+                "peer-2",
+                "PlaceReinforcements",
+                JsonSerializer.SerializeToElement(new
+                {
+                    playerId = "p1",
+                    commandId = "cmd-003",
+                    territoryId = "alaska",
+                    armiesToPlace = 1
+                })));
+        submitResponse.EnsureSuccessStatusCode();
+
+        var stateResponse = await _client.GetAsync($"/api/matches/{matchId}/state");
+        stateResponse.EnsureSuccessStatusCode();
+
+        var payload = await stateResponse.Content.ReadFromJsonAsync<MatchStateResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal(matchId, payload!.MatchId);
+        Assert.Equal(roomId, payload.RoomId);
+        Assert.True(payload.State.Territories.ContainsKey("alaska"));
+        Assert.Equal(6, payload.State.Territories["alaska"].Armies);
+        Assert.Equal("p1", payload.State.Territories["alaska"].OwnerPlayerId);
+    }
+
     private static InitializeMatchRequest BuildInitializeRequest(string roomId) =>
         new(
             roomId,
