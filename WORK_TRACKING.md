@@ -18,8 +18,9 @@ Recommended status board columns:
 - RIS-STEP-006: DONE
 - RIS-STEP-007: DONE
 - RIS-STEP-008: DONE
+- RIS-STEP-009: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-008-world-classic-pack`
+- `feature/ris-step-009-host-networking-layer`
