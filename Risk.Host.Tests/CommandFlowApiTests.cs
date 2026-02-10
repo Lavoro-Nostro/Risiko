@@ -132,6 +132,115 @@ public class CommandFlowApiTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal("p1", payload.State.Territories["alaska"].OwnerPlayerId);
     }
 
+    [Fact]
+    public async Task SubmitCommand_MultipleAcceptedCommands_PublishOrderedEvents()
+    {
+        var matchId = "match-13";
+        var roomId = "room-13";
+
+        var initResponse = await _client.PostAsJsonAsync(
+            $"/api/matches/{matchId}/initialize",
+            BuildInitializeRequest(roomId));
+        initResponse.EnsureSuccessStatusCode();
+
+        var firstResponse = await _client.PostAsJsonAsync(
+            $"/api/matches/{matchId}/commands",
+            new SubmitCommandRequest(
+                "peer-2",
+                "PlaceReinforcements",
+                JsonSerializer.SerializeToElement(new
+                {
+                    playerId = "p1",
+                    commandId = "cmd-101",
+                    territoryId = "alaska",
+                    armiesToPlace = 1
+                })));
+        firstResponse.EnsureSuccessStatusCode();
+
+        var secondResponse = await _client.PostAsJsonAsync(
+            $"/api/matches/{matchId}/commands",
+            new SubmitCommandRequest(
+                "peer-2",
+                "PlaceReinforcements",
+                JsonSerializer.SerializeToElement(new
+                {
+                    playerId = "p1",
+                    commandId = "cmd-102",
+                    territoryId = "alaska",
+                    armiesToPlace = 1
+                })));
+        secondResponse.EnsureSuccessStatusCode();
+
+        var eventsResponse = await _client.GetAsync($"/api/rooms/{roomId}/peers/peer-2/events?after=0");
+        eventsResponse.EnsureSuccessStatusCode();
+        var events = await eventsResponse.Content.ReadFromJsonAsync<List<HostEventMessage>>();
+
+        Assert.NotNull(events);
+        Assert.Equal(2, events!.Count);
+        Assert.Equal(1, events[0].Sequence);
+        Assert.Equal(2, events[1].Sequence);
+        Assert.All(events, e => Assert.Equal("ReinforcementsPlacedEvent", e.Type));
+
+        var afterFirstResponse = await _client.GetAsync($"/api/rooms/{roomId}/peers/peer-2/events?after=1");
+        afterFirstResponse.EnsureSuccessStatusCode();
+        var afterFirstEvents = await afterFirstResponse.Content.ReadFromJsonAsync<List<HostEventMessage>>();
+        Assert.NotNull(afterFirstEvents);
+        Assert.Single(afterFirstEvents!);
+        Assert.Equal(2, afterFirstEvents[0].Sequence);
+    }
+
+    [Fact]
+    public async Task SubmitCommand_DuplicateCommandId_IsRejected_AndDoesNotAppendEvents()
+    {
+        var matchId = "match-14";
+        var roomId = "room-14";
+        const string commandId = "cmd-duplicate";
+
+        var initResponse = await _client.PostAsJsonAsync(
+            $"/api/matches/{matchId}/initialize",
+            BuildInitializeRequest(roomId));
+        initResponse.EnsureSuccessStatusCode();
+
+        var firstSubmitResponse = await _client.PostAsJsonAsync(
+            $"/api/matches/{matchId}/commands",
+            new SubmitCommandRequest(
+                "peer-2",
+                "PlaceReinforcements",
+                JsonSerializer.SerializeToElement(new
+                {
+                    playerId = "p1",
+                    commandId,
+                    territoryId = "alaska",
+                    armiesToPlace = 1
+                })));
+        firstSubmitResponse.EnsureSuccessStatusCode();
+
+        var duplicateSubmitResponse = await _client.PostAsJsonAsync(
+            $"/api/matches/{matchId}/commands",
+            new SubmitCommandRequest(
+                "peer-2",
+                "PlaceReinforcements",
+                JsonSerializer.SerializeToElement(new
+                {
+                    playerId = "p1",
+                    commandId,
+                    territoryId = "alaska",
+                    armiesToPlace = 1
+                })));
+
+        Assert.Equal(HttpStatusCode.Conflict, duplicateSubmitResponse.StatusCode);
+        var duplicatePayload = await duplicateSubmitResponse.Content.ReadFromJsonAsync<SubmitCommandResponse>();
+        Assert.NotNull(duplicatePayload);
+        Assert.False(duplicatePayload!.Accepted);
+        Assert.Equal(CommandErrorCode.Unknown, duplicatePayload.ErrorCode);
+
+        var eventsResponse = await _client.GetAsync($"/api/rooms/{roomId}/peers/peer-2/events?after=0");
+        eventsResponse.EnsureSuccessStatusCode();
+        var events = await eventsResponse.Content.ReadFromJsonAsync<List<HostEventMessage>>();
+        Assert.NotNull(events);
+        Assert.Single(events!);
+    }
+
     private static InitializeMatchRequest BuildInitializeRequest(string roomId) =>
         new(
             roomId,

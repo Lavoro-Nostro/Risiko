@@ -29,8 +29,9 @@ Recommended status board columns:
 - RIS-STEP-017: DONE
 - RIS-STEP-018: DONE
 - RIS-STEP-019: DONE
+- RIS-STEP-020: IN_PROGRESS
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-019-ux-hardening`
+- `feature/ris-step-020-mvp-release-gate`

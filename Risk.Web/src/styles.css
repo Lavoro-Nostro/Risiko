@@ -216,18 +216,6 @@ body {
   font-size: 0.82rem;
 }
 
-.command-status.is-success {
-  color: #1f7a46;
-}
-
-.command-status.is-error {
-  color: #b22626;
-}
-
-.command-status.is-info {
-  color: #265d9b;
-}
-
 .phase-pill {
   display: inline-block;
   margin: 0.2rem 0 0.45rem;
@@ -302,42 +290,6 @@ body {
 .sync-error {
   color: #b22626;
   font-weight: 600;
-}
-
-.ux-hint {
-  color: #786227;
-  font-size: 0.82rem;
-}
-
-.map-stage {
-  position: relative;
-}
-
-.map-overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgba(241, 246, 252, 0.78);
-  border-radius: 14px;
-}
-
-.map-overlay.warning {
-  background: rgba(255, 239, 232, 0.76);
-}
-
-.overlay-card {
-  max-width: 360px;
-  background: #ffffff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.8rem 1rem;
-  box-shadow: 0 10px 30px rgba(16, 26, 41, 0.12);
-}
-
-.overlay-card p {
-  margin: 0.35rem 0 0;
-  color: var(--ink-muted);
 }
 
 .map-canvas {

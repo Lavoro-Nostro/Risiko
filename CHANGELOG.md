@@ -23,15 +23,18 @@ Dates are in ISO format (`YYYY-MM-DD`).
 - Army badge pulse transitions on event-driven army changes.
 - Capture sweep animation triggered by `TerritoryCapturedEvent`.
 - RIS-STEP-019 UX hardening in `Risk.Web`:
-- Added stronger disabled-action guards for disconnected/loading/submitting states.
-- Added clearer rejection feedback with mapped validation reason labels.
-- Added state/event sync status indicators and sync-latency display.
-- Added loading overlay and reconnect warning overlay for sync disruptions.
-- Added structured command feedback severity styling (`success/error/info`).
+- Clearer rejected-action feedback with mapped validation reason labels.
+- Disabled actions for loading/reconnect/submitting blocked states.
+- Loading and reconnect overlays plus sync-status details.
+- RIS-STEP-020 MVP release gate artifacts:
+- Integration coverage for ordered event flow and duplicate command rejection.
+- Manual multiplayer verification checklist (2/4/6 player scenarios).
+- Known issues register and MVP candidate release notes draft.
 
 ### Changed
 - `Risk.Web` now submits turn commands directly to `Risk.Host` via `POST /api/matches/{matchId}/commands`.
 - Control enablement is now phase-aware from authoritative host state.
+- Release-gate documentation now defines explicit evidence for MVP candidate decision.
 
 ### Code Traceability
 - RIS-STEP-016:
@@ -46,6 +49,14 @@ Dates are in ISO format (`YYYY-MM-DD`).
 - RIS-STEP-019:
 - `Risk.Web/src/App.tsx`
 - `Risk.Web/src/styles.css`
+- `Risk.Web/README.md`
+- RIS-STEP-020:
+- `Risk.Host.Tests/CommandFlowApiTests.cs`
+- `docs/06-quality/release-gates.md`
+- `docs/06-quality/manual-multiplayer-test-pass.md`
+- `docs/06-quality/mvp-candidate-release-notes.md`
+- `docs/07-planning/known-issues.md`
+- `WORK_TRACKING.md`
 
 ## [0.3.0] - 2026-02-10
 ### Added

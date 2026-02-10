@@ -26,10 +26,6 @@ Current scope:
 - Attack flash state from host event stream
 - Army badge pulse on territory army updates
 - Capture sweep animation on territory capture events
-- UX hardening implemented:
-- Clear validation/error feedback with command status levels
-- Disabled actions with explicit blocked-state hints
-- Loading/reconnect overlays for state/event sync failures
 
 Planned next milestones:
-- RIS-STEP-020 MVP release gate and integration validation
+- RIS-STEP-019 UX hardening and clearer invalid-action messaging
