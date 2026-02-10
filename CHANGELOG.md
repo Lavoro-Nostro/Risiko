@@ -21,3 +21,9 @@ All notable changes to this project will be documented here.
 - Added `PlayerState` and `TerritoryState`
 - Added GameState transition helpers (`WithPhase`, `WithReinforcements`, `MarkTerritoryCaptured`, `AdvanceTurn`, `SetTerritoryState`)
 - Added `Risk.Engine.Tests/GameStateTests.cs` for GameState transitions and non-mutation behavior
+- RIS-STEP-004 command handlers completed:
+- Added `GameCommandHandler` for `PlaceReinforcements`, `Attack`, `Fortify`, and `EndTurn`
+- Added deterministic attack resolution seeded from state RNG + command ID
+- Added adjacency/path-based validation for attack and fortify
+- Added `CommandExecutionResult` for accepted/rejected command outcomes
+- Added `Risk.Engine.Tests/GameCommandHandlerTests.cs` to validate command transitions and phase rules

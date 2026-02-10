@@ -16,8 +16,8 @@ public class GameStateTests
 
         var territories = new Dictionary<string, TerritoryState>
         {
-            ["alaska"] = new("alaska", "p1", 3),
-            ["alberta"] = new("alberta", "p2", 2)
+            ["alaska"] = new("alaska", "p1", 3, ["alberta"]),
+            ["alberta"] = new("alberta", "p2", 2, ["alaska"])
         };
 
         var state = GameState.CreateInitial(
@@ -77,7 +77,7 @@ public class GameStateTests
     public void SetTerritoryState_UpdatesTerritoryOnNewStateOnly()
     {
         var original = BuildState();
-        var updated = original.SetTerritoryState(new TerritoryState("alaska", "p2", 1));
+        var updated = original.SetTerritoryState(new TerritoryState("alaska", "p2", 1, ["alberta"]));
 
         Assert.Equal("p1", original.Territories["alaska"].OwnerPlayerId);
         Assert.Equal(3, original.Territories["alaska"].Armies);
@@ -112,8 +112,8 @@ public class GameStateTests
 
         var territories = new Dictionary<string, TerritoryState>
         {
-            ["alaska"] = new("alaska", "p1", 3),
-            ["alberta"] = new("alberta", "p2", 2)
+            ["alaska"] = new("alaska", "p1", 3, ["alberta"]),
+            ["alberta"] = new("alberta", "p2", 2, ["alaska"])
         };
 
         return GameState.CreateInitial(
