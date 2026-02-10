@@ -169,6 +169,10 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
         var activePlayerId = playerStates[0].PlayerId;
         var activeOwnedCount = territoryStates.Count(t => t.OwnerPlayerId == activePlayerId);
         var reinforcementPool = Math.Max(3, activeOwnedCount / 3);
+        var playerTokens = participants.ToDictionary(
+            participant => participant.PeerId,
+            _ => Guid.NewGuid().ToString("N"),
+            StringComparer.Ordinal);
 
         _matchSessionService.InitializeMatch(
             matchId,
@@ -176,6 +180,7 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
                 roomId,
                 hostPeerId,
                 playerStates,
+                playerTokens,
                 continentStates,
                 territoryStates,
                 activePlayerId,
@@ -187,12 +192,17 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
             room.Status = RoomStatus.InMatch;
             room.ActiveMatchId = matchId;
             room.MapId = mapId;
+            room.PlayerTokens = new Dictionary<string, string>(playerTokens, StringComparer.Ordinal);
             return new StartMatchResponse(
                 roomId,
                 matchId,
                 mapId,
                 room.Status.ToString().ToLowerInvariant(),
-                room.Participants.ToList());
+                room.Participants.ToList(),
+                playerTokens
+                    .OrderBy(x => x.Key, StringComparer.Ordinal)
+                    .Select(x => new PlayerReconnectToken(x.Key, x.Value))
+                    .ToList());
         }
     }
 
@@ -240,6 +250,7 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
         public List<RoomParticipant> Participants { get; }
         public RoomStatus Status { get; set; } = RoomStatus.Open;
         public string? ActiveMatchId { get; set; }
+        public IReadOnlyDictionary<string, string>? PlayerTokens { get; set; }
     }
 
     private enum RoomStatus

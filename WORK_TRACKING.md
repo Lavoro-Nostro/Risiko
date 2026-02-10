@@ -21,8 +21,9 @@ Recommended status board columns:
 - RIS-STEP-009: DONE
 - RIS-STEP-010: DONE
 - RIS-STEP-011: DONE
+- RIS-STEP-012: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-011-room-match-lifecycle`
+- `feature/ris-step-012-reconnect-support`

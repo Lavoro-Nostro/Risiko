@@ -68,3 +68,10 @@ All notable changes to this project will be documented here.
 - Added deterministic initial player/territory setup when starting a room match
 - Added `Risk.Host.Tests/RoomLifecycleApiTests.cs` integration tests for room lifecycle and start-match flow
 - Expanded total automated coverage to 41 passing tests
+- RIS-STEP-012 reconnect support completed:
+- Added reconnect handshake API: `POST /api/matches/{matchId}/reconnect`
+- Added per-player reconnect token generation at match start
+- Added token validation in match sessions for reconnect authorization
+- Added replay of missing host events after `lastKnownSequence`
+- Added `Risk.Host.Tests/ReconnectApiTests.cs` for valid replay and invalid token scenarios
+- Expanded total automated coverage to 43 passing tests

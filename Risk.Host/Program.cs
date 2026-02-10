@@ -92,6 +92,25 @@ app.MapPost("/api/matches/{matchId}/commands",
             : Results.Conflict(response);
     });
 
+app.MapPost("/api/matches/{matchId}/reconnect",
+    (string matchId, ReconnectRequest request, IMatchSessionService matches) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.PeerId) || string.IsNullOrWhiteSpace(request.PlayerToken))
+        {
+            return Results.BadRequest("peerId and playerToken are required.");
+        }
+
+        var response = matches.Reconnect(matchId, request);
+        if (!response.Accepted && string.Equals(response.Message, "Invalid reconnect token.", StringComparison.Ordinal))
+        {
+            return Results.Unauthorized();
+        }
+
+        return response.Accepted
+            ? Results.Ok(response)
+            : Results.Conflict(response);
+    });
+
 app.MapPost("/api/rooms",
     (CreateRoomRequest request, IRoomSessionService rooms) =>
     {
