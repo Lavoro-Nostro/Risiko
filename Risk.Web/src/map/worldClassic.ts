@@ -1,6 +1,6 @@
 import mapDefinition from "@packs/maps/world-classic/map.json";
 import italianLabels from "@packs/maps/world-classic/i18n/it.json";
-import worldClassicSvg from "@packs/maps/world-classic/map.svg?raw";
+import worldClassicSvgRaw from "@packs/maps/world-classic/Risk_board.svg?raw";
 
 export type TerritoryDefinition = {
   id: string;
@@ -24,6 +24,16 @@ export type MapDefinition = {
 const pack = mapDefinition as MapDefinition;
 const labels = italianLabels as Record<string, string>;
 
+const svgIdAliases: Record<string, string> = {
+  yakursk: "yakutsk"
+};
+
+function normalizeTerritoryId(id: string): string {
+  return svgIdAliases[id] ?? id;
+}
+
+const worldClassicSvg = worldClassicSvgRaw.replace(/id="yakursk"/g, 'id="yakutsk"');
+
 export const worldClassic = {
   map: pack,
   labels,
@@ -31,8 +41,19 @@ export const worldClassic = {
 };
 
 export function territoryIdsFromSvg(svg: string): string[] {
-  const matches = [...svg.matchAll(/<g\s+id="([^"]+)"\s+class="territory">/g)];
-  return matches.map(match => match[1]);
+  const mapIds = new Set(worldClassic.map.territories.map(territory => territory.id));
+  const matches = [...svg.matchAll(/\sid="([^"]+)"/g)];
+  const result = new Set<string>();
+
+  for (const match of matches) {
+    const rawId = match[1];
+    const normalizedId = normalizeTerritoryId(rawId);
+    if (mapIds.has(normalizedId)) {
+      result.add(normalizedId);
+    }
+  }
+
+  return [...result];
 }
 
 export function labelForTerritory(territoryId: string): string {
@@ -46,17 +67,17 @@ export function validateWorldClassicBinding(): string[] {
 
   for (const mapId of mapIds) {
     if (!svgIds.has(mapId)) {
-      errors.push(`Missing SVG territory id: ${mapId}`);
+      errors.push(`ID territorio SVG mancante: ${mapId}`);
     }
 
     if (!labels[`territories.${mapId}`]) {
-      errors.push(`Missing Italian label for territory: ${mapId}`);
+      errors.push(`Etichetta italiana mancante per territorio: ${mapId}`);
     }
   }
 
   for (const svgId of svgIds) {
     if (!mapIds.includes(svgId)) {
-      errors.push(`Unknown SVG territory id not present in map.json: ${svgId}`);
+      errors.push(`ID territorio SVG sconosciuto non presente in map.json: ${svgId}`);
     }
   }
 

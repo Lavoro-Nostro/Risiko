@@ -24,8 +24,12 @@ public static class GameStateProjector
             ReinforcementsPlacedEvent e => ApplyReinforcementsPlaced(state, e),
             AttackResolvedEvent e => ApplyAttackResolved(state, e),
             TerritoryCapturedEvent e => ApplyTerritoryCaptured(state, e),
+            PlayerEliminatedEvent e => ApplyPlayerEliminated(state, e),
             TurnEndedEvent e => ApplyTurnEnded(state, e),
-            CardGrantedEvent => state, // card model comes later
+            ObjectiveCompletedEvent e => ApplyObjectiveCompleted(state, e),
+            GameEndedEvent e => ApplyGameEnded(state, e),
+            CardGrantedEvent e => ApplyCardGranted(state, e),
+            CardsTradedEvent e => ApplyCardsTraded(state, e),
             _ => state
         };
 
@@ -113,4 +117,23 @@ public static class GameStateProjector
 
     private static GameState ApplyTurnEnded(GameState state, TurnEndedEvent evt) =>
         state with { TurnIndex = evt.TurnIndex };
+
+    private static GameState ApplyPlayerEliminated(GameState state, PlayerEliminatedEvent evt) =>
+        state.SetPlayerEliminated(evt.EliminatedPlayerId);
+
+    private static GameState ApplyObjectiveCompleted(GameState state, ObjectiveCompletedEvent evt) =>
+        state.SetWinner(evt.WinnerPlayerId);
+
+    private static GameState ApplyGameEnded(GameState state, GameEndedEvent evt) =>
+        state.SetWinner(evt.WinnerPlayerId);
+
+    private static GameState ApplyCardGranted(GameState state, CardGrantedEvent evt) =>
+        state.AddCardToPlayer(evt.PlayerId, evt.CardId);
+
+    private static GameState ApplyCardsTraded(GameState state, CardsTradedEvent evt) =>
+        state
+            .RemovePlayerCards(evt.PlayerId, evt.CardIds)
+            .AddCardsToDrawPile(evt.CardIds)
+            .WithTradeStep(evt.NextTradeStep)
+            .WithReinforcements(state.ReinforcementsAvailable + evt.BonusArmies);
 }

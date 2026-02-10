@@ -35,7 +35,12 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
             territories,
             request.ActivePlayerId,
             request.ReinforcementsAvailable,
-            request.RngSeed);
+            request.RngSeed,
+            request.ObjectivesByPlayerId,
+            request.CardIdsByPlayerId,
+            request.CardSymbolById,
+            request.DrawPileCardIds,
+            request.TradeBonusStep);
 
         var session = new MatchSession(
             request.RoomId,
@@ -156,6 +161,15 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
                     request.Payload.GetProperty("fromTerritoryId").GetString() ?? string.Empty,
                     request.Payload.GetProperty("toTerritoryId").GetString() ?? string.Empty,
                     request.Payload.GetProperty("attackerDice").GetInt32()),
+                "playcards" => new PlayCardsCommand(
+                    matchId,
+                    request.Payload.GetProperty("playerId").GetString() ?? string.Empty,
+                    request.Payload.GetProperty("commandId").GetString() ?? string.Empty,
+                    request.Payload.GetProperty("cardIds").EnumerateArray()
+                        .Where(x => x.ValueKind == JsonValueKind.String)
+                        .Select(x => x.GetString() ?? string.Empty)
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .ToList()),
                 "fortify" => new FortifyCommand(
                     matchId,
                     request.Payload.GetProperty("playerId").GetString() ?? string.Empty,
@@ -192,6 +206,7 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
         command switch
         {
             PlaceReinforcementsCommand c => handler.Handle(state, c),
+            PlayCardsCommand c => handler.Handle(state, c),
             AttackCommand c => handler.Handle(state, c),
             FortifyCommand c => handler.Handle(state, c),
             EndTurnCommand c => handler.Handle(state, c),

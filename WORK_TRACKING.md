@@ -1,6 +1,6 @@
-# Work Tracking
+﻿# Work Tracking
 
-Use `RISIKO_MASTER_PLAN.md` as the master plan and map work items to RIS IDs.
+Use `RisiKo!_MASTER_PLAN.md` as the master plan and map work items to RIS IDs.
 
 Recommended status board columns:
 - TODO
@@ -35,3 +35,4 @@ Recommended status board columns:
 
 - Active implementation branch for current work:
 - `feature/ris-step-020-mvp-release-gate`
+

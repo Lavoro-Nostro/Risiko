@@ -9,5 +9,7 @@ public enum CommandErrorCode
     NotAdjacent = 4,
     InvalidArmyAmount = 5,
     InvalidPath = 6,
+    GameEnded = 7,
+    InvalidCards = 8,
     Unknown = 999
 }

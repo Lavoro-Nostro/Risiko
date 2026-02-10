@@ -51,7 +51,7 @@ public class EventSourcingTests
     public void CommandHandler_EmitsEvents_ForAcceptedCommands()
     {
         var handler = new GameCommandHandler();
-        var state = BuildState();
+        var state = BuildState().WithPhase(TurnPhase.Reinforcement);
 
         var reinforce = handler.Handle(
             state,
@@ -80,7 +80,7 @@ public class EventSourcingTests
                 new TurnStartedEvent("match-1", 41, DateTimeOffset.UtcNow, "p1", 10, TurnPhase.Reinforcement.ToString())
             ]);
 
-        var state = BuildState();
+        var state = BuildState().WithPhase(TurnPhase.Reinforcement);
         var result = handler.Handle(
             state,
             new PlaceReinforcementsCommand("match-1", "p1", "cmd-seq", "alaska", 1));

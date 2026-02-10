@@ -34,7 +34,7 @@ public class GameStateTests
             rngSeed: 12345);
 
         Assert.Equal("match-1", state.MatchId);
-        Assert.Equal(TurnPhase.Reinforcement, state.Phase);
+        Assert.Equal(TurnPhase.Setup, state.Phase);
         Assert.Equal(0, state.TurnIndex);
         Assert.Equal(1, state.RoundIndex);
         Assert.Equal("p1", state.ActivePlayerId);

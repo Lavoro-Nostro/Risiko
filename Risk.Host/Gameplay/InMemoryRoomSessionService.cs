@@ -24,6 +24,9 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
     public CreateRoomResponse CreateRoom(CreateRoomRequest request)
     {
         var roomId = $"room-{Guid.NewGuid():N}"[..13];
+        var roomName = string.IsNullOrWhiteSpace(request.RoomName)
+            ? $"Lobby {roomId}"
+            : request.RoomName.Trim();
         var host = new RoomParticipant(
             request.HostPeerId,
             request.HostDisplayName,
@@ -31,6 +34,7 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
 
         var room = new RoomSession(
             roomId,
+            roomName,
             request.HostPeerId,
             request.MapId,
             [host]);
@@ -38,10 +42,52 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
         _rooms[roomId] = room;
         return new CreateRoomResponse(
             roomId,
+            room.RoomName,
             request.HostPeerId,
             request.MapId,
             room.Status.ToString().ToLowerInvariant(),
             room.Participants.ToList());
+    }
+
+    public IReadOnlyList<RoomLobbySummary> ListRooms()
+    {
+        return _rooms.Values
+            .Select(room =>
+            {
+                lock (room.Sync)
+                {
+                    return new RoomLobbySummary(
+                        room.RoomId,
+                        room.RoomName,
+                        room.HostPeerId,
+                        room.MapId,
+                        room.Status.ToString().ToLowerInvariant(),
+                        room.Participants.Count,
+                        6);
+                }
+            })
+            .OrderBy(room => room.RoomId, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    public RoomSnapshotResponse? GetRoom(string roomId)
+    {
+        if (!_rooms.TryGetValue(roomId, out var room))
+        {
+            return null;
+        }
+
+        lock (room.Sync)
+        {
+            return new RoomSnapshotResponse(
+                room.RoomId,
+                room.RoomName,
+                room.HostPeerId,
+                room.MapId,
+                room.Status.ToString().ToLowerInvariant(),
+                room.ActiveMatchId,
+                room.Participants.ToList());
+        }
     }
 
     public JoinRoomResponse JoinRoom(string roomId, JoinRoomRequest request)
@@ -60,7 +106,14 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
 
             if (room.Participants.Any(p => p.PeerId == request.PeerId))
             {
-                return new JoinRoomResponse(roomId, room.MapId, room.Status.ToString().ToLowerInvariant(), room.Participants.ToList());
+                return new JoinRoomResponse(
+                    roomId,
+                    room.RoomName,
+                    room.MapId,
+                    room.HostPeerId,
+                    room.Status.ToString().ToLowerInvariant(),
+                    room.ActiveMatchId,
+                    room.Participants.ToList());
             }
 
             if (room.Participants.Count >= 6)
@@ -69,7 +122,14 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
             }
 
             room.Participants.Add(new RoomParticipant(request.PeerId, request.DisplayName, DateTimeOffset.UtcNow));
-            return new JoinRoomResponse(roomId, room.MapId, room.Status.ToString().ToLowerInvariant(), room.Participants.ToList());
+            return new JoinRoomResponse(
+                roomId,
+                room.RoomName,
+                room.MapId,
+                room.HostPeerId,
+                room.Status.ToString().ToLowerInvariant(),
+                room.ActiveMatchId,
+                room.Participants.ToList());
         }
     }
 
@@ -147,7 +207,8 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
 
         var matchId = $"match-{Guid.NewGuid():N}";
         var rngSeed = request.RngSeed ?? 12345;
-        var shuffledTerritories = Shuffle(pack.Territories.Select(t => t.Id).ToList(), rngSeed);
+        var random = new Random(rngSeed);
+        var shuffledTerritories = Shuffle(pack.Territories.Select(t => t.Id).ToList(), random);
 
         var playerStates = participants
             .Select(p => new PlayerState(p.PeerId, p.DisplayName))
@@ -168,7 +229,14 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
 
         var activePlayerId = playerStates[0].PlayerId;
         var activeOwnedCount = territoryStates.Count(t => t.OwnerPlayerId == activePlayerId);
-        var reinforcementPool = Math.Max(3, activeOwnedCount / 3);
+        var setupRemainingForActive = Math.Max(0, GetStartingArmies(playerStates.Count) - activeOwnedCount);
+        var reinforcementPool = Math.Min(3, setupRemainingForActive);
+        var objectivesByPlayerId = BuildObjectives(playerStates, random);
+        var (cardSymbolById, drawPileCardIds) = BuildShuffledDeck(shuffledTerritories, random);
+        var cardIdsByPlayerId = playerStates.ToDictionary(
+            player => player.PlayerId,
+            _ => (IReadOnlyList<string>)[],
+            StringComparer.Ordinal);
         var playerTokens = participants.ToDictionary(
             participant => participant.PeerId,
             _ => Guid.NewGuid().ToString("N"),
@@ -185,7 +253,12 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
                 territoryStates,
                 activePlayerId,
                 reinforcementPool,
-                rngSeed));
+                rngSeed,
+                objectivesByPlayerId,
+                cardIdsByPlayerId,
+                cardSymbolById,
+                drawPileCardIds,
+                TradeBonusStep: 0));
 
         lock (room.Sync)
         {
@@ -195,8 +268,10 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
             room.PlayerTokens = new Dictionary<string, string>(playerTokens, StringComparer.Ordinal);
             return new StartMatchResponse(
                 roomId,
+                room.RoomName,
                 matchId,
                 mapId,
+                room.HostPeerId,
                 room.Status.ToString().ToLowerInvariant(),
                 room.Participants.ToList(),
                 playerTokens
@@ -217,9 +292,166 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
         return absolute;
     }
 
-    private static List<string> Shuffle(List<string> values, int seed)
+    private static IReadOnlyDictionary<string, PlayerObjectiveState> BuildObjectives(
+        IReadOnlyList<PlayerState> players,
+        Random random)
     {
-        var random = new Random(seed);
+        var objectiveDeck = BuildOfficialObjectiveDeck();
+        var shuffledDeck = Shuffle(objectiveDeck.ToList(), random);
+        var objectives = new Dictionary<string, PlayerObjectiveState>(StringComparer.Ordinal);
+
+        for (var i = 0; i < players.Count; i++)
+        {
+            var owner = players[i];
+            var template = shuffledDeck[i % shuffledDeck.Count];
+            objectives[owner.PlayerId] = MaterializeObjective(template, owner, players, random);
+        }
+
+        return objectives;
+    }
+
+    private static PlayerObjectiveState MaterializeObjective(
+        ObjectiveTemplate template,
+        PlayerState owner,
+        IReadOnlyList<PlayerState> players,
+        Random random)
+    {
+        if (!string.Equals(template.Kind, "eliminate_player", StringComparison.Ordinal))
+        {
+            return new PlayerObjectiveState(
+                owner.PlayerId,
+                template.ObjectiveId,
+                template.Title,
+                template.Description,
+                template.Kind,
+                template.TargetTerritoryCount,
+                template.RequiredArmiesPerTerritory,
+                template.RequiredContinentIds,
+                template.RequiredAdditionalContinentCount,
+                null);
+        }
+
+        var candidates = players
+            .Where(player => !string.Equals(player.PlayerId, owner.PlayerId, StringComparison.Ordinal))
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            return BuildFallbackTerritoryObjective(owner.PlayerId);
+        }
+
+        var chosen = candidates[random.Next(candidates.Count)];
+        var description = $"Eliminate player {chosen.DisplayName} ({chosen.PlayerId}). If impossible, conquer 24 territories.";
+        return new PlayerObjectiveState(
+            owner.PlayerId,
+            $"{template.ObjectiveId}:{chosen.PlayerId}",
+            "Eliminate Opponent",
+            description,
+            "eliminate_player",
+            TargetTerritoryCount: 24,
+            EliminateTargetPlayerId: chosen.PlayerId);
+    }
+
+    private static PlayerObjectiveState BuildFallbackTerritoryObjective(string playerId) =>
+        new(
+            playerId,
+            "obj-fallback-24",
+            "Conquer 24 Territories",
+            "Conquer 24 territories.",
+            "territory_count",
+            TargetTerritoryCount: 24);
+
+    private static IReadOnlyList<ObjectiveTemplate> BuildOfficialObjectiveDeck() =>
+    [
+        new(
+            "obj-24",
+            "Conquer 24 Territories",
+            "Conquer 24 territories.",
+            "territory_count",
+            TargetTerritoryCount: 24),
+        new(
+            "obj-18-2",
+            "Conquer 18 with 2+ Armies",
+            "Conquer 18 territories with at least 2 armies on each.",
+            "territory_with_min_armies",
+            TargetTerritoryCount: 18,
+            RequiredArmiesPerTerritory: 2),
+        new(
+            "obj-eu-au-plus1",
+            "Europe + Australia + 1",
+            "Conquer Europe, Australia, and one additional continent.",
+            "continent_combo",
+            RequiredContinentIds: ["europe", "australia"],
+            RequiredAdditionalContinentCount: 1),
+        new(
+            "obj-eu-sa-plus1",
+            "Europe + South America + 1",
+            "Conquer Europe, South America, and one additional continent.",
+            "continent_combo",
+            RequiredContinentIds: ["europe", "south_america"],
+            RequiredAdditionalContinentCount: 1),
+        new(
+            "obj-na-af",
+            "North America + Africa",
+            "Conquer North America and Africa.",
+            "continent_combo",
+            RequiredContinentIds: ["north_america", "africa"]),
+        new(
+            "obj-na-au",
+            "North America + Australia",
+            "Conquer North America and Australia.",
+            "continent_combo",
+            RequiredContinentIds: ["north_america", "australia"]),
+        new(
+            "obj-as-sa",
+            "Asia + South America",
+            "Conquer Asia and South America.",
+            "continent_combo",
+            RequiredContinentIds: ["asia", "south_america"]),
+        new("obj-elim-red", "Eliminate Red", "Eliminate the red player.", "eliminate_player"),
+        new("obj-elim-blue", "Eliminate Blue", "Eliminate the blue player.", "eliminate_player"),
+        new("obj-elim-green", "Eliminate Green", "Eliminate the green player.", "eliminate_player"),
+        new("obj-elim-yellow", "Eliminate Yellow", "Eliminate the yellow player.", "eliminate_player"),
+        new("obj-elim-purple", "Eliminate Purple", "Eliminate the purple player.", "eliminate_player"),
+        new("obj-elim-black", "Eliminate Black", "Eliminate the black player.", "eliminate_player")
+    ];
+
+    private static (IReadOnlyDictionary<string, string> cardSymbolById, IReadOnlyList<string> drawPileCardIds) BuildShuffledDeck(
+        IReadOnlyList<string> territoryIds,
+        Random random)
+    {
+        var symbols = new[] { "infantry", "cavalry", "artillery" };
+        var cardSymbolById = new Dictionary<string, string>(StringComparer.Ordinal);
+        var drawPile = new List<string>(territoryIds.Count + 2);
+
+        for (var i = 0; i < territoryIds.Count; i++)
+        {
+            var cardId = $"territory:{territoryIds[i]}";
+            cardSymbolById[cardId] = symbols[i % symbols.Length];
+            drawPile.Add(cardId);
+        }
+
+        cardSymbolById["joker:1"] = "joker";
+        cardSymbolById["joker:2"] = "joker";
+        drawPile.Add("joker:1");
+        drawPile.Add("joker:2");
+
+        return (cardSymbolById, Shuffle(drawPile, random));
+    }
+
+    private static int GetStartingArmies(int playerCount) =>
+        playerCount switch
+        {
+            2 => 40,
+            3 => 35,
+            4 => 30,
+            5 => 25,
+            6 => 20,
+            _ => 20
+        };
+
+    private static List<T> Shuffle<T>(List<T> values, Random random)
+    {
         for (var i = values.Count - 1; i > 0; i--)
         {
             var j = random.Next(i + 1);
@@ -229,15 +461,27 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
         return values;
     }
 
+    private sealed record ObjectiveTemplate(
+        string ObjectiveId,
+        string Title,
+        string Description,
+        string Kind,
+        int TargetTerritoryCount = 0,
+        int RequiredArmiesPerTerritory = 0,
+        IReadOnlyList<string>? RequiredContinentIds = null,
+        int RequiredAdditionalContinentCount = 0);
+
     private sealed class RoomSession
     {
         public RoomSession(
             string roomId,
+            string roomName,
             string hostPeerId,
             string mapId,
             List<RoomParticipant> participants)
         {
             RoomId = roomId;
+            RoomName = roomName;
             HostPeerId = hostPeerId;
             MapId = mapId;
             Participants = participants;
@@ -245,6 +489,7 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
 
         public object Sync { get; } = new();
         public string RoomId { get; }
+        public string RoomName { get; }
         public string HostPeerId { get; set; }
         public string MapId { get; set; }
         public List<RoomParticipant> Participants { get; }

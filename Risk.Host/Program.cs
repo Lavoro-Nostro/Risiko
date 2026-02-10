@@ -7,11 +7,39 @@ builder.Services.AddSingleton<ISignalingService, InMemorySignalingService>();
 builder.Services.AddSingleton<IMatchSessionService, InMemoryMatchSessionService>();
 builder.Services.AddSingleton<MapPackLoader>();
 builder.Services.AddSingleton<IRoomSessionService, InMemoryRoomSessionService>();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(
+        "RiskWebDevClient",
+        policy => policy
+            .WithOrigins(
+                "http://localhost:5173",
+                "http://127.0.0.1:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+});
 
 var app = builder.Build();
+app.UseCors("RiskWebDevClient");
 
 app.MapGet("/", () => Results.Ok(new { service = "Risk.Host", status = "ok" }));
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
+app.MapGet("/api/rooms",
+    (IRoomSessionService rooms) =>
+    {
+        var list = rooms.ListRooms();
+        return Results.Ok(list);
+    });
+
+app.MapGet("/api/rooms/{roomId}",
+    (string roomId, IRoomSessionService rooms) =>
+    {
+        var room = rooms.GetRoom(roomId);
+        return room is null
+            ? Results.NotFound(new { message = "Room not found." })
+            : Results.Ok(room);
+    });
 
 app.MapPost("/api/rooms/{roomId}/peers/{peerId}/register",
     (string roomId, string peerId, ISignalingService signaling) =>

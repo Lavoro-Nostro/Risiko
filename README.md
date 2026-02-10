@@ -1,4 +1,4 @@
-# Risiko
+﻿# RisiKo!
 
 Host-authoritative, web-first strategy game inspired by classic Risk.
 
@@ -21,7 +21,7 @@ Core engine, host command flow, room/reconnect lifecycle, and first web map rend
 - `Risk.Web` -> client UI/UX and map interaction layer
 - `packs` -> data-driven map and localization packs
 
-Detailed plan: `RISIKO_MASTER_PLAN.md`
+Detailed plan: `RisiKo!_MASTER_PLAN.md`
 
 ## Multiplayer Model
 
@@ -32,7 +32,7 @@ Detailed plan: `RISIKO_MASTER_PLAN.md`
 
 ## Repository Layout
 
-- `RISIKO_MASTER_PLAN.md` -> execution plan with `RIS-*` IDs
+- `RisiKo!_MASTER_PLAN.md` -> execution plan with `RIS-*` IDs
 - `WORK_TRACKING.md` -> operational tracking baseline
 - `docs/` -> product, design, architecture, networking, QA, planning, governance
 - `.github/` -> workflows, templates, repository automation
@@ -78,13 +78,13 @@ Then open `http://localhost:5173` and use the printed values for:
 Build backend modules:
 
 ```bash
-dotnet build Risiko.slnx -c Release
+dotnet build RisiKo!.slnx -c Release
 ```
 
 Run automated tests:
 
 ```bash
-dotnet test Risiko.slnx -c Release
+dotnet test RisiKo!.slnx -c Release
 ```
 
 Run frontend pack-binding tests:
@@ -140,3 +140,4 @@ Before opening PRs:
 2. Follow branch flow rules.
 3. Update docs if behavior/contracts change.
 4. Use provided issue/PR templates.
+

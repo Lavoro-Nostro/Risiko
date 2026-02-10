@@ -14,7 +14,12 @@ public sealed record InitializeMatchRequest(
     IReadOnlyList<TerritoryState> Territories,
     string ActivePlayerId,
     int ReinforcementsAvailable,
-    int RngSeed
+    int RngSeed,
+    IReadOnlyDictionary<string, PlayerObjectiveState>? ObjectivesByPlayerId = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? CardIdsByPlayerId = null,
+    IReadOnlyDictionary<string, string>? CardSymbolById = null,
+    IReadOnlyList<string>? DrawPileCardIds = null,
+    int TradeBonusStep = 0
 );
 
 public sealed record InitializeMatchResponse(

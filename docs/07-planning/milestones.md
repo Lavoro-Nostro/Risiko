@@ -1,4 +1,4 @@
-# Milestones
+﻿# Milestones
 
 - RIS-MS-001: Foundation complete
 - RIS-MS-002: Engine gameplay complete
@@ -7,4 +7,5 @@
 - RIS-MS-005: MVP UI complete
 - RIS-MS-006: MVP shipped
 
-Reference: `RISIKO_MASTER_PLAN.md`
+Reference: `RisiKo!_MASTER_PLAN.md`
+
