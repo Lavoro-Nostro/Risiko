@@ -11,7 +11,7 @@ jobs:
     name: Repository Health Checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Validate required project files
         shell: bash
@@ -47,7 +47,7 @@ jobs:
     name: Optional Build Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
         if: ${{ hashFiles('**/*.sln', '**/*.csproj') != '' }}
