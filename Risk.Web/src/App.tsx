@@ -48,6 +48,32 @@ type SubmitCommandResponse = {
   appliedEventCount: number;
 };
 
+type CommandFeedbackKind = "idle" | "success" | "error" | "info";
+
+type HostEventMessage = {
+  sequence: number;
+  roomId: string;
+  hostPeerId: string;
+  type: string;
+  payload: string;
+  createdAtUtc: string;
+};
+
+type AttackResolvedPayload = {
+  fromTerritoryId: string;
+  toTerritoryId: string;
+  attackerLosses: number;
+  defenderLosses: number;
+};
+
+type ReinforcementsPlacedPayload = {
+  territoryId: string;
+};
+
+type TerritoryCapturedPayload = {
+  territoryId: string;
+};
+
 const OWNER_COLORS = ["#e8a8a8", "#a8c5f5", "#afe1b0", "#f0c286", "#c8b0e7", "#94ddd3"];
 
 function ownerColor(ownerPlayerId: string): string {
@@ -110,12 +136,39 @@ function upsertArmyOverlay(territoryNode: SVGGElement, armies: number): void {
   }
 }
 
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function parseEventPayload<T>(payload: string): T | null {
+  try {
+    return JSON.parse(payload) as T;
+  } catch {
+    return null;
+  }
+}
+
+function commandErrorLabel(errorCode: number): string {
+  return (
+    {
+      1: "Invalid phase for this action",
+      2: "Not active player",
+      3: "Invalid ownership",
+      4: "Territories are not adjacent",
+      5: "Invalid army amount",
+      6: "Invalid fortify path",
+      999: "Unknown validation error"
+    }[errorCode] ?? "Validation error"
+  );
+}
+
 function App() {
   const mapRootRef = useRef<HTMLDivElement>(null);
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string | null>(null);
   const [hoveredTerritoryId, setHoveredTerritoryId] = useState<string | null>(null);
   const [hostUrl, setHostUrl] = useState("http://localhost:5050");
   const [matchId, setMatchId] = useState("");
+  const [roomId, setRoomId] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string>("-");
@@ -131,6 +184,24 @@ function App() {
   const [fortifyToId, setFortifyToId] = useState("");
   const [fortifyArmies, setFortifyArmies] = useState(1);
   const [commandStatus, setCommandStatus] = useState<string>("-");
+  const [commandFeedbackKind, setCommandFeedbackKind] = useState<CommandFeedbackKind>("idle");
+  const [isCommandSubmitting, setIsCommandSubmitting] = useState(false);
+  const [lastEventSequence, setLastEventSequence] = useState(0);
+  const [lastEventType, setLastEventType] = useState("-");
+  const [isStateSyncing, setIsStateSyncing] = useState(false);
+  const [isEventSyncing, setIsEventSyncing] = useState(false);
+  const [eventSyncError, setEventSyncError] = useState<string | null>(null);
+  const [lastSyncEpochMs, setLastSyncEpochMs] = useState<number | null>(null);
+  const [underAttackTerritoryId, setUnderAttackTerritoryId] = useState<string | null>(null);
+  const [capturedTerritoryId, setCapturedTerritoryId] = useState<string | null>(null);
+  const [recentArmyChangeIds, setRecentArmyChangeIds] = useState<string[]>([]);
+  const [diceRolling, setDiceRolling] = useState(false);
+  const [dicePreview, setDicePreview] = useState({
+    attacker: 1,
+    defender: 1,
+    attackerLosses: 0,
+    defenderLosses: 0
+  });
   const validationErrors = useMemo(() => validateWorldClassicBinding(), []);
   const territoryCount = worldClassic.map.territories.length;
   const ownerByTerritoryId = useMemo<Record<string, string>>(() => {
@@ -233,20 +304,117 @@ function App() {
   const maxAttackerDice = Math.min(3, Math.max(0, attackFromArmies - 1));
   const defenderDice = Math.min(2, Math.max(0, attackToArmies));
   const combatComparisons = Math.min(attackDice, defenderDice);
+  const hasAuthoritativeState = Boolean(authoritativeState);
+  const syncLagSeconds =
+    lastSyncEpochMs === null ? null : Math.max(0, Math.floor((Date.now() - lastSyncEpochMs) / 1000));
+  const showLoadingOverlay = isConnected && (isStateSyncing || isEventSyncing) && !hasAuthoritativeState;
+  const showReconnectOverlay = isConnected && (Boolean(loadError) || Boolean(eventSyncError));
+  const globalActionBlocked = !isConnected || !hasAuthoritativeState || isCommandSubmitting;
+  const blockedReason = !isConnected
+    ? "Connect to host and sync match state first."
+    : !hasAuthoritativeState
+      ? "Waiting for authoritative match state."
+      : isCommandSubmitting
+        ? "A command is currently being submitted."
+        : "";
 
-  const fetchAuthoritativeState = useCallback(async () => {
-    const response = await fetch(
-      `${hostUrl.replace(/\/$/, "")}/api/matches/${encodeURIComponent(matchId.trim())}/state`
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+  const pulseArmyChange = useCallback((territoryIds: string[]) => {
+    if (!territoryIds.length) {
+      return;
     }
 
-    const payload = (await response.json()) as MatchStateResponse;
-    setAuthoritativeState(payload.state);
-    setLoadError(null);
-    setLastSyncTime(new Date().toLocaleTimeString());
+    setRecentArmyChangeIds(current => Array.from(new Set([...current, ...territoryIds])));
+    setTimeout(() => {
+      setRecentArmyChangeIds(current => current.filter(id => !territoryIds.includes(id)));
+    }, 800);
+  }, []);
+
+  const animateDiceRoll = useCallback(async (attackerLosses: number, defenderLosses: number) => {
+    setDiceRolling(true);
+    for (let i = 0; i < 6; i += 1) {
+      setDicePreview(current => ({
+        ...current,
+        attacker: 1 + Math.floor(Math.random() * 6),
+        defender: 1 + Math.floor(Math.random() * 6)
+      }));
+      await sleep(80);
+    }
+
+    setDicePreview(current => ({
+      ...current,
+      attacker: Math.max(1, 6 - attackerLosses),
+      defender: Math.max(1, 6 - defenderLosses),
+      attackerLosses,
+      defenderLosses
+    }));
+    await sleep(280);
+    setDiceRolling(false);
+  }, []);
+
+  const processHostEvents = useCallback(
+    async (events: HostEventMessage[]) => {
+      for (const event of events) {
+        setLastEventSequence(event.sequence);
+        setLastEventType(event.type);
+
+        if (event.type === "AttackResolvedEvent") {
+          const payload = parseEventPayload<AttackResolvedPayload>(event.payload);
+          if (payload) {
+            setUnderAttackTerritoryId(payload.toTerritoryId);
+            pulseArmyChange([payload.fromTerritoryId, payload.toTerritoryId]);
+            await animateDiceRoll(payload.attackerLosses, payload.defenderLosses);
+            setTimeout(() => {
+              setUnderAttackTerritoryId(current =>
+                current === payload.toTerritoryId ? null : current
+              );
+            }, 750);
+          }
+        }
+
+        if (event.type === "ReinforcementsPlacedEvent") {
+          const payload = parseEventPayload<ReinforcementsPlacedPayload>(event.payload);
+          if (payload) {
+            pulseArmyChange([payload.territoryId]);
+          }
+        }
+
+        if (event.type === "TerritoryCapturedEvent") {
+          const payload = parseEventPayload<TerritoryCapturedPayload>(event.payload);
+          if (payload) {
+            setCapturedTerritoryId(payload.territoryId);
+            pulseArmyChange([payload.territoryId]);
+            setTimeout(() => {
+              setCapturedTerritoryId(current => (current === payload.territoryId ? null : current));
+            }, 1300);
+          }
+        }
+
+        await sleep(100);
+      }
+    },
+    [animateDiceRoll, pulseArmyChange]
+  );
+
+  const fetchAuthoritativeState = useCallback(async () => {
+    setIsStateSyncing(true);
+    try {
+      const response = await fetch(
+        `${hostUrl.replace(/\/$/, "")}/api/matches/${encodeURIComponent(matchId.trim())}/state`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const payload = (await response.json()) as MatchStateResponse;
+      setAuthoritativeState(payload.state);
+      setRoomId(payload.roomId);
+      setLoadError(null);
+      setLastSyncTime(new Date().toLocaleTimeString());
+      setLastSyncEpochMs(Date.now());
+    } finally {
+      setIsStateSyncing(false);
+    }
   }, [hostUrl, matchId]);
 
   const selectableTerritoryIds = useMemo(
@@ -290,6 +458,47 @@ function App() {
       clearInterval(interval);
     };
   }, [fetchAuthoritativeState, isConnected, matchId]);
+
+  useEffect(() => {
+    if (!isConnected || !roomId || !peerId) {
+      return;
+    }
+
+    let cancelled = false;
+    const fetchEvents = async () => {
+      setIsEventSyncing(true);
+      try {
+        const response = await fetch(
+          `${hostUrl.replace(/\/$/, "")}/api/rooms/${encodeURIComponent(roomId)}/peers/${encodeURIComponent(peerId)}/events?after=${lastEventSequence}`
+        );
+        if (!response.ok) {
+          setEventSyncError(`Event sync failed (HTTP ${response.status}).`);
+          return;
+        }
+
+        const events = (await response.json()) as HostEventMessage[];
+        if (cancelled || !events.length) {
+          setEventSyncError(null);
+          return;
+        }
+
+        const ordered = [...events].sort((a, b) => a.sequence - b.sequence);
+        await processHostEvents(ordered);
+        setEventSyncError(null);
+      } catch {
+        setEventSyncError("Event sync temporarily unavailable.");
+      } finally {
+        setIsEventSyncing(false);
+      }
+    };
+
+    fetchEvents();
+    const interval = setInterval(fetchEvents, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [hostUrl, isConnected, lastEventSequence, peerId, processHostEvents, roomId]);
 
   useEffect(() => {
     if (!currentPlayerId) {
@@ -426,9 +635,13 @@ function App() {
         ownerByTerritoryId,
         selectableTerritoryIds,
         neighborTerritoryIds,
-        underAttackTerritoryId: null,
-        capturedTerritoryId: null
+        underAttackTerritoryId,
+        capturedTerritoryId
       });
+
+      if (recentArmyChangeIds.includes(territoryId)) {
+        classes.push("is-army-updated");
+      }
 
       territoryNode.setAttribute("class", classes.join(" "));
       territoryNode.style.setProperty("--owner-color", ownerColor(owner));
@@ -441,7 +654,10 @@ function App() {
     neighborTerritoryIds,
     currentPlayerId,
     ownerByTerritoryId,
-    armyByTerritoryId
+    armyByTerritoryId,
+    underAttackTerritoryId,
+    capturedTerritoryId,
+    recentArmyChangeIds
   ]);
   const selectedOwner = selectedTerritoryId
     ? ownerByTerritoryId[selectedTerritoryId] ?? "neutral"
@@ -451,11 +667,13 @@ function App() {
   const submitCommand = async (type: string, payload: Record<string, unknown>) => {
     if (!isConnected || !matchId.trim()) {
       setCommandStatus("Host state sync is not active.");
+      setCommandFeedbackKind("error");
       return;
     }
 
     if (!peerId.trim() || !commandPlayerId.trim()) {
       setCommandStatus("peerId and playerId are required.");
+      setCommandFeedbackKind("error");
       return;
     }
 
@@ -471,6 +689,9 @@ function App() {
     };
 
     try {
+      setIsCommandSubmitting(true);
+      setCommandFeedbackKind("info");
+      setCommandStatus(`Submitting ${type}...`);
       const response = await fetch(
         `${hostUrl.replace(/\/$/, "")}/api/matches/${encodeURIComponent(matchId.trim())}/commands`,
         {
@@ -482,14 +703,20 @@ function App() {
 
       const result = (await response.json()) as SubmitCommandResponse;
       if (!response.ok || !result.accepted) {
-        setCommandStatus(`Rejected (${result.errorCode}): ${result.message}`);
+        const label = commandErrorLabel(result.errorCode);
+        setCommandStatus(`Rejected (${result.errorCode} - ${label}): ${result.message}`);
+        setCommandFeedbackKind("error");
         return;
       }
 
       setCommandStatus(`Accepted: ${type} (${result.appliedEventCount} event(s))`);
+      setCommandFeedbackKind("success");
       await fetchAuthoritativeState();
     } catch (error) {
       setCommandStatus(`Command error: ${(error as Error).message}`);
+      setCommandFeedbackKind("error");
+    } finally {
+      setIsCommandSubmitting(false);
     }
   };
 
@@ -572,7 +799,7 @@ function App() {
             <button
               type="button"
               onClick={() => setIsConnected(true)}
-              disabled={!hostUrl.trim() || !matchId.trim()}
+              disabled={!hostUrl.trim() || !matchId.trim() || isStateSyncing}
             >
               Avvia Sync Stato
             </button>
@@ -582,6 +809,15 @@ function App() {
                 setIsConnected(false);
                 setAuthoritativeState(null);
                 setLoadError(null);
+                setRoomId("");
+                setLastEventSequence(0);
+                setLastEventType("-");
+                setUnderAttackTerritoryId(null);
+                setCapturedTerritoryId(null);
+                setRecentArmyChangeIds([]);
+                setEventSyncError(null);
+                setCommandFeedbackKind("idle");
+                setCommandStatus("-");
               }}
             >
               Disconnetti
@@ -589,13 +825,19 @@ function App() {
           </div>
 
           <p>Sync: {isConnected ? "attivo" : "disattivo"}</p>
+          <p>State sync: {isStateSyncing ? "in corso" : "idle"}</p>
+          <p>Event sync: {isEventSyncing ? "in corso" : "idle"}</p>
           <p>Ultimo aggiornamento: {lastSyncTime}</p>
+          <p>Latenza sync: {syncLagSeconds === null ? "-" : `${syncLagSeconds}s`}</p>
           <p>Turno: {authoritativeState?.turnIndex ?? "-"}</p>
           <p>Round: {authoritativeState?.roundIndex ?? "-"}</p>
           <p>Fase: {authoritativeState?.phase ?? "-"}</p>
           <p>Giocatore attivo: {currentPlayerId || "-"}</p>
           <p>Rinforzi disponibili: {reinforcementPool}</p>
+          <p>Room ID: {roomId || "-"}</p>
           {loadError && <p className="sync-error">{loadError}</p>}
+          {eventSyncError && <p className="sync-error">{eventSyncError}</p>}
+          {blockedReason && <p className="ux-hint">{blockedReason}</p>}
 
           <h2>Identita Comando</h2>
           <label className="field">
@@ -642,7 +884,12 @@ function App() {
             </label>
             <button
               type="button"
-              disabled={currentPhase !== "reinforcement" || !reinforceTerritoryId || reinforceArmies < 1}
+              disabled={
+                globalActionBlocked ||
+                currentPhase !== "reinforcement" ||
+                !reinforceTerritoryId ||
+                reinforceArmies < 1
+              }
               onClick={() =>
                 submitCommand("PlaceReinforcements", {
                   territoryId: reinforceTerritoryId,
@@ -693,6 +940,7 @@ function App() {
             <button
               type="button"
               disabled={
+                globalActionBlocked ||
                 currentPhase !== "attack" ||
                 !attackFromId ||
                 !attackToId ||
@@ -744,7 +992,12 @@ function App() {
             </label>
             <button
               type="button"
-              disabled={currentPhase !== "fortify" || !fortifyFromId || !fortifyToId}
+              disabled={
+                globalActionBlocked ||
+                currentPhase !== "fortify" ||
+                !fortifyFromId ||
+                !fortifyToId
+              }
               onClick={() =>
                 submitCommand("Fortify", {
                   fromTerritoryId: fortifyFromId,
@@ -759,10 +1012,14 @@ function App() {
 
           <div className="action-section">
             <h3>Turn</h3>
-            <button type="button" onClick={() => submitCommand("EndTurn", {})}>
+            <button
+              type="button"
+              disabled={globalActionBlocked}
+              onClick={() => submitCommand("EndTurn", {})}
+            >
               End Turn
             </button>
-            <p className="command-status">{commandStatus}</p>
+            <p className={`command-status is-${commandFeedbackKind}`}>{commandStatus}</p>
           </div>
 
           <div className="legend">
@@ -794,11 +1051,29 @@ function App() {
           )}
         </aside>
 
-        <div
-          ref={mapRootRef}
-          className="map-canvas"
-          dangerouslySetInnerHTML={{ __html: worldClassic.svg }}
-        />
+        <div className="map-stage">
+          <div
+            ref={mapRootRef}
+            className="map-canvas"
+            dangerouslySetInnerHTML={{ __html: worldClassic.svg }}
+          />
+          {showLoadingOverlay && (
+            <div className="map-overlay">
+              <div className="overlay-card">
+                <strong>Syncing match state...</strong>
+                <p>Waiting for authoritative host snapshot.</p>
+              </div>
+            </div>
+          )}
+          {showReconnectOverlay && !showLoadingOverlay && (
+            <div className="map-overlay warning">
+              <div className="overlay-card">
+                <strong>Connection issue detected</strong>
+                <p>{loadError ?? eventSyncError ?? "Host connection temporarily unavailable."}</p>
+              </div>
+            </div>
+          )}
+        </div>
 
         <aside className="territory-panel tactical-panel">
           <h2>Tactical Context</h2>
@@ -807,6 +1082,8 @@ function App() {
             <p className="phase-pill">{authoritativeState?.phase ?? "-"}</p>
             <p>Active player: {(activePlayer?.displayName ?? currentPlayerId) || "-"}</p>
             <p>Reinforcements: {reinforcementPool}</p>
+            <p>Last event seq: {lastEventSequence}</p>
+            <p>Last event type: {lastEventType}</p>
           </div>
 
           <div className="action-section">
@@ -837,6 +1114,13 @@ function App() {
                 <p>Defender dice: {defenderDice}</p>
                 <p>Dice comparisons: {combatComparisons}</p>
                 <p>Max attacker dice allowed: {maxAttackerDice}</p>
+                <div className={diceRolling ? "dice-roll-panel is-rolling" : "dice-roll-panel"}>
+                  <span className="dice-face attacker">{dicePreview.attacker}</span>
+                  <span className="dice-face defender">{dicePreview.defender}</span>
+                </div>
+                <p>
+                  Losses {"->"} attacker: {dicePreview.attackerLosses}, defender: {dicePreview.defenderLosses}
+                </p>
               </>
             ) : (
               <p>Pick attack source and target for preview.</p>
