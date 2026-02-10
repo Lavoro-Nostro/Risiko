@@ -8,6 +8,8 @@ Current state:
 - Rejected commands return explicit `CommandErrorCode` reason codes
 - Room lifecycle endpoints implemented (create/join/leave/start match)
 - Room start supports `mapId` selection and starts an active authoritative match session
+- Reconnect endpoint implemented with `matchId + peerId + playerToken` handshake
+- Missing host events replayed from `lastKnownSequence` during reconnect
 - Buildable with integration tests (`Risk.Host.Tests`)
 
 Planned contents:

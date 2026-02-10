@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Risk.Engine.Contracts.Validation;
 using Risk.Engine.Domain.State;
+using Risk.Host.Networking;
 
 namespace Risk.Host.Gameplay;
 
@@ -8,6 +9,7 @@ public sealed record InitializeMatchRequest(
     string RoomId,
     string HostPeerId,
     IReadOnlyList<PlayerState> Players,
+    IReadOnlyDictionary<string, string> PlayerTokens,
     IReadOnlyList<ContinentState> Continents,
     IReadOnlyList<TerritoryState> Territories,
     string ActivePlayerId,
@@ -33,4 +35,18 @@ public sealed record SubmitCommandResponse(
     CommandErrorCode ErrorCode,
     string Message,
     int AppliedEventCount
+);
+
+public sealed record ReconnectRequest(
+    string PeerId,
+    string PlayerToken,
+    long LastKnownSequence
+);
+
+public sealed record ReconnectResponse(
+    bool Accepted,
+    string Message,
+    string MatchId,
+    string RoomId,
+    IReadOnlyList<HostEventMessage> MissingEvents
 );

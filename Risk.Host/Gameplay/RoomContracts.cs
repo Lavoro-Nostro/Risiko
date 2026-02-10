@@ -53,5 +53,11 @@ public sealed record StartMatchResponse(
     string MatchId,
     string MapId,
     string Status,
-    IReadOnlyList<RoomParticipant> Participants
+    IReadOnlyList<RoomParticipant> Participants,
+    IReadOnlyList<PlayerReconnectToken> ReconnectTokens
+);
+
+public sealed record PlayerReconnectToken(
+    string PeerId,
+    string PlayerToken
 );

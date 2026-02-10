@@ -40,6 +40,7 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
         var session = new MatchSession(
             request.RoomId,
             request.HostPeerId,
+            new Dictionary<string, string>(request.PlayerTokens, StringComparer.Ordinal),
             new GameCommandHandler(),
             new InMemoryGameEventStore(),
             initialState);
@@ -100,6 +101,26 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
             session.ProcessedCommandIds.Add(commandId);
             session.State = result.State;
             return new SubmitCommandResponse(true, CommandErrorCode.None, "Accepted.", appliedEvents.Count);
+        }
+    }
+
+    public ReconnectResponse Reconnect(string matchId, ReconnectRequest request)
+    {
+        if (!_matches.TryGetValue(matchId, out var session))
+        {
+            return new ReconnectResponse(false, "Match not found.", matchId, string.Empty, []);
+        }
+
+        lock (session.Sync)
+        {
+            if (!session.PlayerTokens.TryGetValue(request.PeerId, out var expectedToken) ||
+                !string.Equals(expectedToken, request.PlayerToken, StringComparison.Ordinal))
+            {
+                return new ReconnectResponse(false, "Invalid reconnect token.", matchId, session.RoomId, []);
+            }
+
+            var missingEvents = _signalingService.GetHostEvents(session.RoomId, request.LastKnownSequence);
+            return new ReconnectResponse(true, "Reconnect accepted.", matchId, session.RoomId, missingEvents);
         }
     }
 
@@ -169,12 +190,14 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
         public MatchSession(
             string roomId,
             string hostPeerId,
+            IReadOnlyDictionary<string, string> playerTokens,
             GameCommandHandler handler,
             IGameEventStore eventStore,
             GameState state)
         {
             RoomId = roomId;
             HostPeerId = hostPeerId;
+            PlayerTokens = playerTokens;
             Handler = handler;
             EventStore = eventStore;
             State = state;
@@ -183,6 +206,7 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
         public object Sync { get; } = new();
         public string RoomId { get; }
         public string HostPeerId { get; }
+        public IReadOnlyDictionary<string, string> PlayerTokens { get; }
         public GameCommandHandler Handler { get; }
         public IGameEventStore EventStore { get; }
         public HashSet<string> ProcessedCommandIds { get; } = new(StringComparer.Ordinal);

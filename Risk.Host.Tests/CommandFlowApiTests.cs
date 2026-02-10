@@ -103,6 +103,11 @@ public class CommandFlowApiTests : IClassFixture<WebApplicationFactory<Program>>
                 new PlayerState("p1", "Player 1"),
                 new PlayerState("p2", "Player 2")
             ],
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["p1"] = "token-p1",
+                ["p2"] = "token-p2"
+            },
             [
                 new ContinentState("north_america", 5, ["alaska", "alberta"])
             ],
