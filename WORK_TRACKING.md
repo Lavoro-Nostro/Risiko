@@ -11,7 +11,7 @@ Recommended status board columns:
 ## Current Sprint Snapshot
 
 - RIS-STEP-001: DONE
-- RIS-STEP-002: IN_PROGRESS
+- RIS-STEP-002: DONE
 - RIS-STEP-003: TODO
 
 ## Branch
