@@ -75,3 +75,9 @@ All notable changes to this project will be documented here.
 - Added replay of missing host events after `lastKnownSequence`
 - Added `Risk.Host.Tests/ReconnectApiTests.cs` for valid replay and invalid token scenarios
 - Expanded total automated coverage to 43 passing tests
+- RIS-STEP-013 web SVG map rendering completed:
+- Added real world-classic map binding in `Risk.Web` using shared `packs/maps/world-classic` assets
+- Added interactive SVG territory selection and metadata side panel in `Risk.Web/src/App.tsx`
+- Added pack-binding module and validation helpers in `Risk.Web/src/map/worldClassic.ts`
+- Added Vitest suite `Risk.Web/src/map/worldClassic.test.ts` to enforce SVG/map/i18n ID consistency
+- Added `npm test` script and Vitest integration for frontend validation
