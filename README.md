@@ -22,6 +22,15 @@ No gameplay code is included yet; this stage defines structure, scope, architect
 - Next step: Initialize projects without implementing gameplay logic
 - Multiplayer model: Host-authoritative P2P (one player hosts the match; no dedicated game server)
 
+## Branch Model
+
+- `stable`: production-ready branch
+- `main`: release-candidate integration
+- `dev`: active development integration
+- `feature/*`, `fix/*`, `hotfix/*`: short-lived working branches
+
+Detailed workflow: `docs/08-governance/contributing.md`
+
 ## Language
 
 Primary language target for game content and UX: Italian (it-IT).
