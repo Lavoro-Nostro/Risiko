@@ -63,6 +63,18 @@ Run host + web together (two terminals):
 ./scripts/run-dev.ps1
 ```
 
+Bootstrap a local playable match (creates room, adds 2 players, starts match):
+
+```powershell
+./scripts/bootstrap-local-match.ps1
+```
+
+Then open `http://localhost:5173` and use the printed values for:
+- `URL Host`
+- `Match ID`
+- `Peer ID`
+- `Player ID`
+
 Build backend modules:
 
 ```bash
