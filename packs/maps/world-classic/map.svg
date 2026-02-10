@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1680 880">
+  <title>Risiko World Classic Placeholder Map</title>
+  <desc>Territory placeholder geometry with canonical IDs for engine and UI binding.</desc>
+  <rect x="0" y="0" width="1680" height="880" fill="#f4f7fb"/>
+  <g id="alaska" class="territory">
+    <rect x="20" y="20" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="30" y="62" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">alaska</text>
+  </g>
+  <g id="northwest_territory" class="territory">
+    <rect x="240" y="20" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="250" y="62" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">northwest_territory</text>
+  </g>
+  <g id="greenland" class="territory">
+    <rect x="460" y="20" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="470" y="62" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">greenland</text>
+  </g>
+  <g id="alberta" class="territory">
+    <rect x="680" y="20" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="690" y="62" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">alberta</text>
+  </g>
+  <g id="ontario" class="territory">
+    <rect x="900" y="20" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="910" y="62" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">ontario</text>
+  </g>
+  <g id="quebec" class="territory">
+    <rect x="1120" y="20" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1130" y="62" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">quebec</text>
+  </g>
+  <g id="western_united_states" class="territory">
+    <rect x="1340" y="20" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1350" y="62" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">western_united_states</text>
+  </g>
+  <g id="eastern_united_states" class="territory">
+    <rect x="20" y="150" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="30" y="192" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">eastern_united_states</text>
+  </g>
+  <g id="central_america" class="territory">
+    <rect x="240" y="150" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="250" y="192" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">central_america</text>
+  </g>
+  <g id="venezuela" class="territory">
+    <rect x="460" y="150" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="470" y="192" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">venezuela</text>
+  </g>
+  <g id="peru" class="territory">
+    <rect x="680" y="150" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="690" y="192" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">peru</text>
+  </g>
+  <g id="brazil" class="territory">
+    <rect x="900" y="150" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="910" y="192" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">brazil</text>
+  </g>
+  <g id="argentina" class="territory">
+    <rect x="1120" y="150" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1130" y="192" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">argentina</text>
+  </g>
+  <g id="iceland" class="territory">
+    <rect x="1340" y="150" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1350" y="192" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">iceland</text>
+  </g>
+  <g id="scandinavia" class="territory">
+    <rect x="20" y="280" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="30" y="322" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">scandinavia</text>
+  </g>
+  <g id="ukraine" class="territory">
+    <rect x="240" y="280" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="250" y="322" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">ukraine</text>
+  </g>
+  <g id="great_britain" class="territory">
+    <rect x="460" y="280" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="470" y="322" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">great_britain</text>
+  </g>
+  <g id="northern_europe" class="territory">
+    <rect x="680" y="280" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="690" y="322" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">northern_europe</text>
+  </g>
+  <g id="western_europe" class="territory">
+    <rect x="900" y="280" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="910" y="322" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">western_europe</text>
+  </g>
+  <g id="southern_europe" class="territory">
+    <rect x="1120" y="280" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1130" y="322" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">southern_europe</text>
+  </g>
+  <g id="north_africa" class="territory">
+    <rect x="1340" y="280" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1350" y="322" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">north_africa</text>
+  </g>
+  <g id="egypt" class="territory">
+    <rect x="20" y="410" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="30" y="452" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">egypt</text>
+  </g>
+  <g id="east_africa" class="territory">
+    <rect x="240" y="410" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="250" y="452" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">east_africa</text>
+  </g>
+  <g id="congo" class="territory">
+    <rect x="460" y="410" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="470" y="452" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">congo</text>
+  </g>
+  <g id="south_africa" class="territory">
+    <rect x="680" y="410" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="690" y="452" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">south_africa</text>
+  </g>
+  <g id="madagascar" class="territory">
+    <rect x="900" y="410" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="910" y="452" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">madagascar</text>
+  </g>
+  <g id="ural" class="territory">
+    <rect x="1120" y="410" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1130" y="452" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">ural</text>
+  </g>
+  <g id="siberia" class="territory">
+    <rect x="1340" y="410" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1350" y="452" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">siberia</text>
+  </g>
+  <g id="yakutsk" class="territory">
+    <rect x="20" y="540" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="30" y="582" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">yakutsk</text>
+  </g>
+  <g id="kamchatka" class="territory">
+    <rect x="240" y="540" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="250" y="582" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">kamchatka</text>
+  </g>
+  <g id="irkutsk" class="territory">
+    <rect x="460" y="540" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="470" y="582" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">irkutsk</text>
+  </g>
+  <g id="mongolia" class="territory">
+    <rect x="680" y="540" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="690" y="582" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">mongolia</text>
+  </g>
+  <g id="japan" class="territory">
+    <rect x="900" y="540" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="910" y="582" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">japan</text>
+  </g>
+  <g id="afghanistan" class="territory">
+    <rect x="1120" y="540" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1130" y="582" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">afghanistan</text>
+  </g>
+  <g id="middle_east" class="territory">
+    <rect x="1340" y="540" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1350" y="582" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">middle_east</text>
+  </g>
+  <g id="india" class="territory">
+    <rect x="20" y="670" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="30" y="712" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">india</text>
+  </g>
+  <g id="china" class="territory">
+    <rect x="240" y="670" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="250" y="712" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">china</text>
+  </g>
+  <g id="siam" class="territory">
+    <rect x="460" y="670" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="470" y="712" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">siam</text>
+  </g>
+  <g id="indonesia" class="territory">
+    <rect x="680" y="670" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="690" y="712" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">indonesia</text>
+  </g>
+  <g id="new_guinea" class="territory">
+    <rect x="900" y="670" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="910" y="712" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">new_guinea</text>
+  </g>
+  <g id="western_australia" class="territory">
+    <rect x="1120" y="670" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1130" y="712" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">western_australia</text>
+  </g>
+  <g id="eastern_australia" class="territory">
+    <rect x="1340" y="670" width="180" height="70" rx="10" ry="10" fill="#d9e8ff" stroke="#2a4f84" stroke-width="2"/>
+    <text x="1350" y="712" font-family="Segoe UI, sans-serif" font-size="12" fill="#123">eastern_australia</text>
+  </g>
+</svg>
