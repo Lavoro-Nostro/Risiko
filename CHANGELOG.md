@@ -4,7 +4,22 @@ This project follows Keep a Changelog style and Semantic Versioning (pre-1.0).
 Dates are in ISO format (`YYYY-MM-DD`).
 
 ## [Unreleased]
-- No unreleased entries yet.
+### Added
+- RIS-STEP-016 turn phase control panel in `Risk.Web`:
+- Reinforce controls with territory + armies selector.
+- Attack controls with source/target territory and attacker dice selector.
+- Fortify controls with source/target territory and army amount selector.
+- End turn action wired to host command endpoint.
+- Command feedback/status panel for accepted/rejected actions.
+
+### Changed
+- `Risk.Web` now submits turn commands directly to `Risk.Host` via `POST /api/matches/{matchId}/commands`.
+- Control enablement is now phase-aware from authoritative host state.
+
+### Code Traceability
+- RIS-STEP-016:
+- `Risk.Web/src/App.tsx`
+- `Risk.Web/src/styles.css`
 
 ## [0.3.0] - 2026-02-10
 ### Added
