@@ -13,8 +13,9 @@ Recommended status board columns:
 - RIS-STEP-001: DONE
 - RIS-STEP-002: DONE
 - RIS-STEP-003: DONE
+- RIS-STEP-004: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-003-game-state-model`
+- `feature/ris-step-004-command-handlers`

@@ -1,3 +1,49 @@
 {
-  "_comment": "Segnaposto. Le chiavi finali verranno aggiunte durante la fase di implementazione."
+  "territories.alaska": "Alaska",
+  "territories.northwest_territory": "Territori del Nord-Ovest",
+  "territories.greenland": "Groenlandia",
+  "territories.alberta": "Alberta",
+  "territories.ontario": "Ontario",
+  "territories.quebec": "Quebec",
+  "territories.western_united_states": "Stati Uniti Occidentali",
+  "territories.eastern_united_states": "Stati Uniti Orientali",
+  "territories.central_america": "America Centrale",
+
+  "territories.venezuela": "Venezuela",
+  "territories.peru": "Peru",
+  "territories.brazil": "Brasile",
+  "territories.argentina": "Argentina",
+
+  "territories.iceland": "Islanda",
+  "territories.scandinavia": "Scandinavia",
+  "territories.ukraine": "Ucraina",
+  "territories.great_britain": "Gran Bretagna",
+  "territories.northern_europe": "Europa Settentrionale",
+  "territories.western_europe": "Europa Occidentale",
+  "territories.southern_europe": "Europa Meridionale",
+
+  "territories.north_africa": "Nord Africa",
+  "territories.egypt": "Egitto",
+  "territories.east_africa": "Africa Orientale",
+  "territories.congo": "Congo",
+  "territories.south_africa": "Sud Africa",
+  "territories.madagascar": "Madagascar",
+
+  "territories.ural": "Urali",
+  "territories.siberia": "Siberia",
+  "territories.yakutsk": "Yakuzia",
+  "territories.kamchatka": "Kamchatka",
+  "territories.irkutsk": "Irkutsk",
+  "territories.mongolia": "Mongolia",
+  "territories.japan": "Giappone",
+  "territories.afghanistan": "Afghanistan",
+  "territories.middle_east": "Medio Oriente",
+  "territories.india": "India",
+  "territories.china": "Cina",
+  "territories.siam": "Siam",
+
+  "territories.indonesia": "Indonesia",
+  "territories.new_guinea": "Nuova Guinea",
+  "territories.western_australia": "Australia Occidentale",
+  "territories.eastern_australia": "Australia Orientale"
 }
