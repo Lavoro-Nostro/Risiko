@@ -15,8 +15,9 @@ Recommended status board columns:
 - RIS-STEP-003: DONE
 - RIS-STEP-004: DONE
 - RIS-STEP-005: DONE
+- RIS-STEP-006: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-005-event-replay`
+- `feature/ris-step-006-engine-test-coverage`

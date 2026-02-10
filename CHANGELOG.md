@@ -34,3 +34,8 @@ All notable changes to this project will be documented here.
 - Added event envelope model for accepted/rejected command outcomes
 - Updated command handler to emit domain events for accepted commands with sequence IDs
 - Added `Risk.Engine.Tests/EventSourcingTests.cs` for event store ordering, replay, and sequence continuation
+- RIS-STEP-006 engine test coverage completed:
+- Added explicit attack dice-boundary validation tests
+- Added continent bonus reinforcement coverage for end-turn progression
+- Added `ContinentState` to GameState and integrated continent bonuses in reinforcement calculation
+- Expanded engine automated coverage to 26 passing tests

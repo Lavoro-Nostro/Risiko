@@ -292,7 +292,22 @@ public sealed class GameCommandHandler
     {
         var territoryCount = state.Territories.Values.Count(t => t.OwnerPlayerId == playerId);
         var byTerritory = Math.Max(3, territoryCount / 3);
-        return byTerritory;
+        var continentBonus = 0;
+
+        foreach (var continent in state.Continents)
+        {
+            var ownsAll = continent.TerritoryIds.All(territoryId =>
+                state.TryGetTerritory(territoryId, out var territory) &&
+                territory is not null &&
+                territory.OwnerPlayerId == playerId);
+
+            if (ownsAll)
+            {
+                continentBonus += continent.Bonus;
+            }
+        }
+
+        return byTerritory + continentBonus;
     }
 
     private static bool HasOwnedPath(GameState state, string playerId, string fromTerritoryId, string toTerritoryId)
