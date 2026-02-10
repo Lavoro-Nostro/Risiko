@@ -1,12 +1,21 @@
 using Risk.Engine.Contracts;
 using Risk.Engine.Contracts.Commands;
+using Risk.Engine.Contracts.Events;
 using Risk.Engine.Contracts.Validation;
 using Risk.Engine.Domain.State;
+using Risk.Engine.Application.EventSourcing;
 
 namespace Risk.Engine.Application;
 
 public sealed class GameCommandHandler
 {
+    private long _sequence;
+
+    public void InitializeSequenceFromHistory(IEnumerable<IGameEvent> history)
+    {
+        _sequence = history.Any() ? history.Max(e => e.Sequence) : 0;
+    }
+
     public CommandExecutionResult Handle(GameState state, PlaceReinforcementsCommand command)
     {
         if (state.Phase != TurnPhase.Reinforcement)
@@ -39,7 +48,18 @@ public sealed class GameCommandHandler
             .SetTerritoryState(updatedTerritory)
             .WithReinforcements(state.ReinforcementsAvailable - command.ArmiesToPlace);
 
-        return CommandExecutionResult.Accepted(nextState);
+        var evt = new ReinforcementsPlacedEvent(
+            state.MatchId,
+            NextSequence(),
+            DateTimeOffset.UtcNow,
+            command.PlayerId,
+            command.TerritoryId,
+            command.ArmiesToPlace,
+            nextState.ReinforcementsAvailable);
+
+        return CommandExecutionResult.Accepted(
+            nextState,
+            [new GameEventEnvelope(true, evt, command.CommandId)]);
     }
 
     public CommandExecutionResult Handle(GameState state, AttackCommand command)
@@ -129,7 +149,35 @@ public sealed class GameCommandHandler
                 .MarkTerritoryCaptured(true);
         }
 
-        return CommandExecutionResult.Accepted(nextState);
+        var events = new List<GameEventEnvelope>();
+        var attackEvent = new AttackResolvedEvent(
+            state.MatchId,
+            NextSequence(),
+            DateTimeOffset.UtcNow,
+            command.PlayerId,
+            toTerritory.OwnerPlayerId,
+            command.FromTerritoryId,
+            command.ToTerritoryId,
+            attackerLosses,
+            defenderLosses);
+
+        events.Add(new GameEventEnvelope(true, attackEvent, command.CommandId));
+
+        if (updatedTo.Armies <= 0)
+        {
+            var captureEvent = new TerritoryCapturedEvent(
+                state.MatchId,
+                NextSequence(),
+                DateTimeOffset.UtcNow,
+                command.ToTerritoryId,
+                toTerritory.OwnerPlayerId,
+                command.PlayerId,
+                nextState.Territories[command.ToTerritoryId].Armies);
+
+            events.Add(new GameEventEnvelope(true, captureEvent, command.CommandId));
+        }
+
+        return CommandExecutionResult.Accepted(nextState, events);
     }
 
     public CommandExecutionResult Handle(GameState state, FortifyCommand command)
@@ -172,7 +220,18 @@ public sealed class GameCommandHandler
             .SetTerritoryState(updatedFrom)
             .SetTerritoryState(updatedTo);
 
-        return CommandExecutionResult.Accepted(nextState);
+        return CommandExecutionResult.Accepted(
+            nextState,
+            [new GameEventEnvelope(
+                true,
+                new TurnStartedEvent(
+                    state.MatchId,
+                    NextSequence(),
+                    DateTimeOffset.UtcNow,
+                    state.ActivePlayerId,
+                    state.TurnIndex,
+                    TurnPhase.Fortify.ToString()),
+                command.CommandId)]);
     }
 
     public CommandExecutionResult Handle(GameState state, EndTurnCommand command)
@@ -205,7 +264,28 @@ public sealed class GameCommandHandler
         var nextReinforcements = CalculateReinforcements(state, nextPlayerId);
 
         var nextState = state.AdvanceTurn(nextPlayerId, nextReinforcements, roundWrap);
-        return CommandExecutionResult.Accepted(nextState);
+
+        var ended = new TurnEndedEvent(
+            state.MatchId,
+            NextSequence(),
+            DateTimeOffset.UtcNow,
+            command.PlayerId,
+            nextState.TurnIndex);
+
+        var started = new TurnStartedEvent(
+            state.MatchId,
+            NextSequence(),
+            DateTimeOffset.UtcNow,
+            nextPlayerId,
+            nextState.TurnIndex,
+            nextState.Phase.ToString());
+
+        return CommandExecutionResult.Accepted(
+            nextState,
+            [
+                new GameEventEnvelope(true, ended, command.CommandId),
+                new GameEventEnvelope(true, started, command.CommandId)
+            ]);
     }
 
     private static int CalculateReinforcements(GameState state, string playerId)
@@ -286,5 +366,11 @@ public sealed class GameCommandHandler
             commandId);
 
         return new Random(seed);
+    }
+
+    private long NextSequence()
+    {
+        _sequence += 1;
+        return _sequence;
     }
 }
