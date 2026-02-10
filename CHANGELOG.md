@@ -54,3 +54,10 @@ All notable changes to this project will be documented here.
 - Added REST endpoints for peer register, signal send/poll, and host event publish/poll
 - Added `Risk.Host.Tests` integration suite for signaling/event API behavior
 - Expanded total automated coverage to 36 passing tests
+- RIS-STEP-010 host command flow completed:
+- Added in-memory host match session service in `Risk.Host` with authoritative command execution
+- Added match initialization API and command submission API
+- Wired command pipeline: peer command -> engine validation/apply -> event store append -> host event broadcast
+- Added explicit command rejection responses with `CommandErrorCode` reason codes
+- Added `Risk.Host.Tests/CommandFlowApiTests.cs` integration tests for accepted and rejected command paths
+- Expanded total automated coverage to 38 passing tests
