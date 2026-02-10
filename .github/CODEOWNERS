@@ -1,6 +1,6 @@
 # CODEOWNERS
-# TODO: replace with real GitHub users/teams before enforcing CODEOWNERS checks.
-# Examples:
-# * @your-username
-# /docs/ @your-org/docs-team
-# /.github/ @your-org/maintainers
+# Primary owner set to repository owner account.
+
+* @Lavoro-Nostro
+/docs/ @Lavoro-Nostro
+/.github/ @Lavoro-Nostro
