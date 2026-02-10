@@ -23,8 +23,9 @@ Recommended status board columns:
 - RIS-STEP-011: DONE
 - RIS-STEP-012: DONE
 - RIS-STEP-013: DONE
+- RIS-STEP-014: DONE
 
 ## Branch
 
 - Active implementation branch for current work:
-- `feature/ris-step-013-web-svg-map-rendering`
+- `feature/ris-step-014-territory-visual-states`

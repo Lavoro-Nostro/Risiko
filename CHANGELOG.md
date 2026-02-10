@@ -81,3 +81,9 @@ All notable changes to this project will be documented here.
 - Added pack-binding module and validation helpers in `Risk.Web/src/map/worldClassic.ts`
 - Added Vitest suite `Risk.Web/src/map/worldClassic.test.ts` to enforce SVG/map/i18n ID consistency
 - Added `npm test` script and Vitest integration for frontend validation
+- RIS-STEP-014 territory visual states completed:
+- Added state-driven territory visual class engine in `Risk.Web/src/map/territoryVisualState.ts`
+- Added explicit visual states: neutral, owned, hover, selectable, selected, under-attack, captured
+- Added state and transition styling in `Risk.Web/src/styles.css`
+- Added interactive demo controls in `Risk.Web/src/App.tsx` for phase/player/combat markers
+- Added Vitest suite `Risk.Web/src/map/territoryVisualState.test.ts` for state logic coverage

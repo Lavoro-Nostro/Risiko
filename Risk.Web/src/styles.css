@@ -89,6 +89,87 @@ body {
   letter-spacing: 0.06em;
 }
 
+.field {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.field select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.45rem;
+  background: #fff;
+  color: var(--ink);
+}
+
+.button-row {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.button-row button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.button-row button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.legend {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.86rem;
+}
+
+.legend-item::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid #3c4650;
+}
+
+.legend-item.neutral::before {
+  background: #d9d9d9;
+}
+
+.legend-item.owned::before {
+  background: #c8e1ff;
+}
+
+.legend-item.selectable::before {
+  background: #f2f2ff;
+  border-style: dashed;
+}
+
+.legend-item.selected::before {
+  background: #ffd95d;
+}
+
+.legend-item.attack::before {
+  background: #ffc4bc;
+}
+
+.legend-item.captured::before {
+  background: #9bf4c9;
+}
+
 .territory-panel p {
   margin: 0.4rem 0;
   color: var(--ink-muted);
@@ -111,27 +192,88 @@ body {
 
 .map-canvas .territory-node {
   cursor: pointer;
-  transition: transform 130ms ease;
+  transition: transform 130ms ease, filter 130ms ease;
 }
 
 .map-canvas .territory-node rect {
   fill: var(--territory) !important;
   stroke: var(--territory-stroke) !important;
+  transition: fill 160ms ease, stroke 160ms ease, stroke-width 120ms ease;
 }
 
+.map-canvas .territory-node.is-hovered rect,
 .map-canvas .territory-node:hover rect {
-  fill: #d3ffd9 !important;
+  fill: #d6ffeb !important;
+}
+
+.map-canvas .territory-node.is-neutral rect {
+  fill: #d4d9df !important;
+  stroke: #5e6974 !important;
+}
+
+.map-canvas .territory-node.owner-player-1.is-owned rect {
+  fill: #ffd0cb !important;
+}
+
+.map-canvas .territory-node.owner-player-2.is-owned rect {
+  fill: #c7dbff !important;
+}
+
+.map-canvas .territory-node.owner-player-3.is-owned rect {
+  fill: #c7f4c9 !important;
+}
+
+.map-canvas .territory-node.is-selectable rect {
+  stroke-width: 3 !important;
+  stroke-dasharray: 6 4;
 }
 
 .map-canvas .territory-node:focus-visible rect,
 .map-canvas .territory-node.is-selected rect {
   fill: var(--territory-selected) !important;
   stroke: var(--accent) !important;
-  stroke-width: 3 !important;
+  stroke-width: 4 !important;
+  stroke-dasharray: none;
+}
+
+.map-canvas .territory-node.is-under-attack rect {
+  fill: #ffcec4 !important;
+  stroke: #b22626 !important;
+  animation: pulse-attack 850ms ease-in-out infinite;
+}
+
+.map-canvas .territory-node.is-captured rect {
+  fill: #abf5d1 !important;
+  stroke: #1b8a5f !important;
+  animation: pulse-capture 900ms ease-in-out 3;
 }
 
 .map-canvas .territory-node text {
   pointer-events: none;
+}
+
+@keyframes pulse-attack {
+  0% {
+    filter: drop-shadow(0 0 0 rgba(178, 38, 38, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(178, 38, 38, 0.55));
+  }
+  100% {
+    filter: drop-shadow(0 0 0 rgba(178, 38, 38, 0));
+  }
+}
+
+@keyframes pulse-capture {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
+  100% {
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 980px) {
