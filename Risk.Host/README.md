@@ -10,6 +10,7 @@ Current state:
 - Room start supports `mapId` selection and starts an active authoritative match session
 - Reconnect endpoint implemented with `matchId + peerId + playerToken` handshake
 - Missing host events replayed from `lastKnownSequence` during reconnect
+- Authoritative match snapshot endpoint implemented: `GET /api/matches/{matchId}/state`
 - Buildable with integration tests (`Risk.Host.Tests`)
 
 Planned contents:

@@ -40,6 +40,7 @@ describe("territory visual state", () => {
       currentPlayerId: "player-1",
       ownerByTerritoryId,
       selectableTerritoryIds: new Set(["kamchatka"]),
+      neighborTerritoryIds: new Set(["kamchatka"]),
       underAttackTerritoryId: "kamchatka",
       capturedTerritoryId: "kamchatka"
     });
@@ -49,6 +50,7 @@ describe("territory visual state", () => {
     expect(classes).toContain("is-selected");
     expect(classes).toContain("is-hovered");
     expect(classes).toContain("is-selectable");
+    expect(classes).toContain("is-neighbor");
     expect(classes).toContain("is-under-attack");
     expect(classes).toContain("is-captured");
   });

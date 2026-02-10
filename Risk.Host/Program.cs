@@ -92,6 +92,15 @@ app.MapPost("/api/matches/{matchId}/commands",
             : Results.Conflict(response);
     });
 
+app.MapGet("/api/matches/{matchId}/state",
+    (string matchId, IMatchSessionService matches) =>
+    {
+        var response = matches.GetMatchState(matchId);
+        return response is null
+            ? Results.NotFound(new { message = "Match not found." })
+            : Results.Ok(response);
+    });
+
 app.MapPost("/api/matches/{matchId}/reconnect",
     (string matchId, ReconnectRequest request, IMatchSessionService matches) =>
     {
