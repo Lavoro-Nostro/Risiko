@@ -6,6 +6,7 @@ public sealed record GameState
 {
     public required string MatchId { get; init; }
     public required IReadOnlyList<PlayerState> Players { get; init; }
+    public required IReadOnlyList<ContinentState> Continents { get; init; }
     public required IReadOnlyDictionary<string, TerritoryState> Territories { get; init; }
     public required TurnPhase Phase { get; init; }
     public required int TurnIndex { get; init; }
@@ -18,6 +19,7 @@ public sealed record GameState
     public static GameState CreateInitial(
         string matchId,
         IReadOnlyList<PlayerState> players,
+        IReadOnlyList<ContinentState> continents,
         IReadOnlyDictionary<string, TerritoryState> territories,
         string activePlayerId,
         int reinforcementPool,
@@ -26,6 +28,7 @@ public sealed record GameState
         {
             MatchId = matchId,
             Players = players,
+            Continents = continents,
             Territories = territories,
             Phase = TurnPhase.Reinforcement,
             TurnIndex = 0,

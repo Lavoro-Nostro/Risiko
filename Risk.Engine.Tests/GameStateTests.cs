@@ -19,10 +19,15 @@ public class GameStateTests
             ["alaska"] = new("alaska", "p1", 3, ["alberta"]),
             ["alberta"] = new("alberta", "p2", 2, ["alaska"])
         };
+        var continents = new List<ContinentState>
+        {
+            new("north_america", 5, ["alaska", "alberta"])
+        };
 
         var state = GameState.CreateInitial(
             "match-1",
             players,
+            continents,
             territories,
             activePlayerId: "p1",
             reinforcementPool: 5,
@@ -115,10 +120,15 @@ public class GameStateTests
             ["alaska"] = new("alaska", "p1", 3, ["alberta"]),
             ["alberta"] = new("alberta", "p2", 2, ["alaska"])
         };
+        var continents = new List<ContinentState>
+        {
+            new("north_america", 5, ["alaska", "alberta"])
+        };
 
         return GameState.CreateInitial(
             "match-1",
             players,
+            continents,
             territories,
             activePlayerId: "p1",
             reinforcementPool: 4,
