@@ -2,7 +2,7 @@ name: Stale Issues and PRs
 
 on:
   schedule:
-    - cron: '30 1 * * *'
+    - cron: '30 1 * * 1'
   workflow_dispatch:
 
 jobs:
