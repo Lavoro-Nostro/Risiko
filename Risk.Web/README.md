@@ -1,10 +1,13 @@
-# Web Module (Structure Only)
+# Web Module
 
-Planned contents:
-- React app shell
-- SVG map renderer
-- State/event client store
-- Phase control UI
-- Room and match screens
+Vite + React + TypeScript scaffold for Risiko frontend.
 
-No implementation code in this stage.
+Current scope:
+- App shell only
+- No gameplay logic yet
+- No networking integration yet
+
+Planned next milestones:
+- RIS-STEP-013 map rendering
+- RIS-STEP-014 territory interaction states
+- RIS-STEP-015 host-authoritative event binding

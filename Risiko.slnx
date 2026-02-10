@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Risk.Engine/Risk.Engine.csproj" />
+  <Project Path="Risk.Host/Risk.Host.csproj" />
+</Solution>
