@@ -4,3 +4,4 @@
 - `milestones.md`
 - `risk-register.md`
 - `backlog.md`
+- `known-issues.md`
