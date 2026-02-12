@@ -418,7 +418,7 @@ function App() {
     : state?.activePlayerId ?? "-";
   const phaseInstruction =
     currentPhase === "setup"
-      ? "Setup iniziale: piazza esattamente i rinforzi indicati (max 3). Il turno passa automaticamente."
+      ? "Setup iniziale: piazza fino a 3 rinforzi totali sul tuo turno (solo su territori posseduti). Il turno passa quando finisci i rinforzi disponibili."
       : currentPhase === "reinforcement"
       ? "Piazza tutti i rinforzi disponibili, poi premi Fine / Prossimo."
       : currentPhase === "attack"
@@ -739,14 +739,10 @@ function App() {
   }, [fortifyTargetOptions, fortifyToId]);
 
   useEffect(() => {
-    if (currentPhase === "setup" && reinforceArmies !== reinforceMax) {
-      setReinforceArmies(reinforceMax);
-      return;
-    }
     if (reinforceArmies > reinforceMax) {
       setReinforceArmies(reinforceMax);
     }
-  }, [currentPhase, reinforceArmies, reinforceMax]);
+  }, [reinforceArmies, reinforceMax]);
 
   useEffect(() => {
     return () => {
@@ -1621,7 +1617,7 @@ function App() {
               type="button"
               className="btn-secondary stepper-btn"
               onClick={() => setReinforceArmies(current => Math.max(1, current - 1))}
-              disabled={!isMyTurn || (currentPhase !== "reinforcement" && currentPhase !== "setup") || currentPhase === "setup" || reinforceArmies <= 1}
+              disabled={!isMyTurn || (currentPhase !== "reinforcement" && currentPhase !== "setup") || reinforceArmies <= 1}
             >
               -
             </button>
@@ -1630,7 +1626,7 @@ function App() {
               type="button"
               className="btn-secondary stepper-btn"
               onClick={() => setReinforceArmies(current => Math.min(reinforceMax, current + 1))}
-              disabled={!isMyTurn || (currentPhase !== "reinforcement" && currentPhase !== "setup") || currentPhase === "setup" || reinforceArmies >= reinforceMax}
+              disabled={!isMyTurn || (currentPhase !== "reinforcement" && currentPhase !== "setup") || reinforceArmies >= reinforceMax}
             >
               +
             </button>

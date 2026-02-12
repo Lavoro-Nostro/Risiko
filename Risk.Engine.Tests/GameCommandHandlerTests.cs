@@ -37,7 +37,7 @@ public class GameCommandHandlerTests
     }
 
     [Fact]
-    public void SetupPlaceReinforcements_MustPlaceExactPool_AndAutoPassesTurn()
+    public void SetupPlaceReinforcements_UsingFullPool_AutoPassesTurn()
     {
         var state = BuildState(phase: TurnPhase.Setup, activePlayerId: "p1", reinforcementPool: 3) with
         {
@@ -67,7 +67,7 @@ public class GameCommandHandlerTests
     }
 
     [Fact]
-    public void SetupPlaceReinforcements_PartialPlacement_IsRejected()
+    public void SetupPlaceReinforcements_PartialPlacement_IsAccepted_AndKeepsTurn()
     {
         var state = BuildState(phase: TurnPhase.Setup, activePlayerId: "p1", reinforcementPool: 3);
 
@@ -75,8 +75,12 @@ public class GameCommandHandlerTests
             state,
             new PlaceReinforcementsCommand("match-1", "p1", "cmd-setup-partial", "alaska", 1));
 
-        Assert.False(result.Validation.IsValid);
-        Assert.Equal(CommandErrorCode.InvalidArmyAmount, result.Validation.ErrorCode);
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal("p1", result.State.ActivePlayerId);
+        Assert.Equal(TurnPhase.Setup, result.State.Phase);
+        Assert.Equal(2, result.State.ReinforcementsAvailable);
+        Assert.Single(result.EventEnvelopes);
+        Assert.IsType<ReinforcementsPlacedEvent>(result.EventEnvelopes[0].Event);
     }
 
     [Fact]

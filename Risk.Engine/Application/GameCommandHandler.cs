@@ -58,14 +58,6 @@ public sealed class GameCommandHandler
             return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidArmyAmount, "Invalid reinforcement amount.");
         }
 
-        if (state.Phase == TurnPhase.Setup && command.ArmiesToPlace != state.ReinforcementsAvailable)
-        {
-            return CommandExecutionResult.Rejected(
-                state,
-                CommandErrorCode.InvalidArmyAmount,
-                $"In setup phase you must place exactly {state.ReinforcementsAvailable} armies.");
-        }
-
         var updatedTerritory = territory with { Armies = territory.Armies + command.ArmiesToPlace };
         var nextState = state
             .SetTerritoryState(updatedTerritory)
