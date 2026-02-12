@@ -570,6 +570,12 @@ button:disabled {
   height: 156px;
 }
 
+.objective-svg-card.reveal {
+  width: 280px;
+  min-width: 280px;
+  height: 402px;
+}
+
 .objective-svg-surface,
 .objective-svg-surface svg {
   width: 100%;
@@ -579,11 +585,17 @@ button:disabled {
 
 .objective-svg-overlay {
   position: absolute;
-  left: 14%;
-  right: 14%;
-  top: 30%;
+  left: 12%;
+  right: 12%;
+  top: 31%;
+  max-height: 46%;
+  overflow: hidden;
   text-align: center;
   color: #233646;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4rem;
 }
 
 .objective-svg-card.compact .objective-svg-overlay {
@@ -595,7 +607,9 @@ button:disabled {
 .objective-svg-overlay h4 {
   margin: 0;
   font-size: 0.94rem;
-  line-height: 1.1;
+  line-height: 1.2;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .objective-svg-card.compact .objective-svg-overlay h4 {
@@ -603,9 +617,11 @@ button:disabled {
 }
 
 .objective-svg-overlay p {
-  margin: 0.35rem 0 0;
+  margin: 0;
   font-size: 0.74rem;
-  line-height: 1.15;
+  line-height: 1.22;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .objective-svg-card.compact .objective-svg-overlay p {
@@ -694,6 +710,27 @@ button:disabled {
   width: 210px;
   height: 300px;
   margin: 0 auto;
+}
+
+.deal-card.objective.no-frame {
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.deal-card.objective.no-frame small {
+  display: block;
+  margin-top: 0.55rem;
+  color: #e8f2f8;
+  text-shadow: 0 1px 2px rgba(9, 20, 31, 0.85);
+}
+
+.deal-card.objective.no-frame .flip-card {
+  width: 280px;
+  height: 402px;
 }
 
 .deal-territory-stack {
@@ -1023,6 +1060,19 @@ button:disabled {
   filter: drop-shadow(0 0 5px rgba(244, 252, 255, 0.48));
 }
 
+.arena-map svg .territory-setup-owned {
+  stroke: #c9efff !important;
+  stroke-width: 2.35 !important;
+  stroke-dasharray: 4 3 !important;
+  filter: drop-shadow(0 0 8px rgba(162, 232, 255, 0.52));
+}
+
+.arena-map svg .territory-selected-reinforce {
+  stroke: #7dffb2 !important;
+  stroke-width: 2.8 !important;
+  filter: drop-shadow(0 0 8px rgba(110, 255, 173, 0.62));
+}
+
 .arena-map svg .territory-attack-source,
 .arena-map svg .territory-selected-source {
   stroke: #ffd85f !important;
@@ -1037,6 +1087,19 @@ button:disabled {
   stroke-dasharray: 7 4 !important;
   animation: attackPulse 1s ease-in-out infinite;
   filter: drop-shadow(0 0 9px rgba(255, 95, 95, 0.72));
+}
+
+.arena-map svg .territory-selected-fortify-source {
+  stroke: #7fd9ff !important;
+  stroke-width: 2.45 !important;
+  filter: drop-shadow(0 0 8px rgba(127, 217, 255, 0.65));
+}
+
+.arena-map svg .territory-selected-fortify-target {
+  stroke: #9de2ff !important;
+  stroke-width: 2.35 !important;
+  stroke-dasharray: 6 3 !important;
+  filter: drop-shadow(0 0 7px rgba(157, 226, 255, 0.58));
 }
 
 .map-zoom-tools {

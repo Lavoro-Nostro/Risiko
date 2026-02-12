@@ -516,7 +516,7 @@ function App() {
 
       if (currentPhase === "reinforcement" || currentPhase === "setup") {
         if (territory.ownerPlayerId === playerId) {
-          setReinforceTerritoryId(territoryId);
+          setReinforceTerritoryId(current => (current === territoryId ? "" : territoryId));
           setStatus(`Rinforzo selezionato: ${labelForTerritory(territoryId)}`);
         }
         return;
@@ -559,6 +559,22 @@ function App() {
     },
     [attackFromId, currentPhase, fortifyFromId, isMyTurn, playerId, state]
   );
+
+  const clearMapSelections = useCallback(() => {
+    if (currentPhase === "setup" || currentPhase === "reinforcement") {
+      setReinforceTerritoryId("");
+      return;
+    }
+    if (currentPhase === "attack") {
+      setAttackFromId("");
+      setAttackToId("");
+      return;
+    }
+    if (currentPhase === "fortify") {
+      setFortifyFromId("");
+      setFortifyToId("");
+    }
+  }, [currentPhase]);
 
   useEffect(() => {
     const timer = setTimeout(() => setScreen("portal"), 900);
@@ -1071,20 +1087,30 @@ function App() {
       node.style.setProperty("--owner-color", ownerColor);
       node.classList.toggle("territory-owned", !!territoryState);
       node.classList.toggle("territory-owned-self", territoryState?.ownerPlayerId === playerId);
+      node.classList.toggle("territory-setup-owned", currentPhase === "setup" && territoryState?.ownerPlayerId === playerId);
+      node.classList.toggle(
+        "territory-selected-reinforce",
+        (currentPhase === "setup" || currentPhase === "reinforcement") && territory.id === reinforceTerritoryId
+      );
       node.classList.toggle("territory-attack-source", currentPhase === "attack" && isMyTurn && attackSourceIdSet.has(territory.id));
-      node.classList.toggle("territory-selected-source", territory.id === attackFromId);
-      node.classList.toggle("territory-selected-target", territory.id === attackToId);
-      node.classList.toggle("territory-attack-target", possibleAttackTargetIds.has(territory.id));
+      node.classList.toggle("territory-selected-source", currentPhase === "attack" && territory.id === attackFromId);
+      node.classList.toggle("territory-selected-target", currentPhase === "attack" && territory.id === attackToId);
+      node.classList.toggle("territory-attack-target", currentPhase === "attack" && possibleAttackTargetIds.has(territory.id));
+      node.classList.toggle("territory-selected-fortify-source", currentPhase === "fortify" && territory.id === fortifyFromId);
+      node.classList.toggle("territory-selected-fortify-target", currentPhase === "fortify" && territory.id === fortifyToId);
     }
   }, [
     attackFromId,
     attackSourceIdSet,
     attackToId,
     currentPhase,
+    fortifyFromId,
+    fortifyToId,
     isMyTurn,
     playerColorById,
     playerId,
     possibleAttackTargetIds,
+    reinforceTerritoryId,
     screen,
     state
   ]);
@@ -1263,7 +1289,7 @@ function App() {
   };
 
   const renderObjectiveCard = (compact = false) => (
-    <div className={`objective-svg-card ${compact ? "compact" : ""}`}>
+    <div className={`objective-svg-card ${compact ? "compact" : "reveal"}`}>
       <div className="objective-svg-surface" dangerouslySetInnerHTML={{ __html: OBJECTIVE_CARD_BASE }} />
       <div className="objective-svg-overlay">
         <h4>{myObjective?.title ?? "Carta Obiettivo"}</h4>
@@ -1464,6 +1490,13 @@ function App() {
           }}
           onMouseUp={() => setIsPanning(false)}
           onMouseLeave={() => setIsPanning(false)}
+          onClick={event => {
+            const target = event.target as Element | null;
+            if (target?.closest("[data-territory-id]")) {
+              return;
+            }
+            clearMapSelections();
+          }}
         >
           <div className="arena-map-stage" style={{ transform: `translate(calc(-50% + ${mapOffset.x}px), calc(-50% + ${mapOffset.y}px)) scale(${mapScale})` }}>
             <div ref={mapRef} className="map-canvas arena-map" dangerouslySetInnerHTML={{ __html: worldClassic.svg }} />
@@ -1725,7 +1758,7 @@ function App() {
       {dealStage !== "idle" ? (
         <div className="deal-overlay global">
           {dealStage === "objective" ? (
-            <div className="deal-card objective svg">
+            <div className="deal-card objective svg no-frame">
               {renderFlipCard(
                 renderObjectiveCard(false),
                 <div className="objective-svg-card">
