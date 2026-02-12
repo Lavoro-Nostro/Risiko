@@ -39,7 +39,19 @@ public sealed record SubmitCommandResponse(
     bool Accepted,
     CommandErrorCode ErrorCode,
     string Message,
-    int AppliedEventCount
+    int AppliedEventCount,
+    AttackResolutionPayload? AttackResolution = null
+);
+
+public sealed record AttackResolutionPayload(
+    string AttackerPlayerId,
+    string DefenderPlayerId,
+    string FromTerritoryId,
+    string ToTerritoryId,
+    IReadOnlyList<int> AttackerRolls,
+    IReadOnlyList<int> DefenderRolls,
+    int AttackerLosses,
+    int DefenderLosses
 );
 
 public sealed record ReconnectRequest(

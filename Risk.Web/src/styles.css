@@ -21,6 +21,14 @@ body {
   color: var(--ink);
   font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   background: linear-gradient(120deg, var(--bg-a), var(--bg-b));
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .splash-shell,
@@ -349,21 +357,22 @@ button:disabled {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 1.05rem;
 }
 
 .player-token {
   position: relative;
-  width: 82px;
-  height: 96px;
+  width: 96px;
+  height: 116px;
+  z-index: 0;
 }
 
 .player-card-tab {
   position: absolute;
-  left: 4px;
-  top: 84px;
-  width: 132px;
-  height: 88px;
+  left: 6px;
+  top: 90px;
+  width: 120px;
+  height: 80px;
   border-radius: 12px;
   border: 1px solid rgba(238, 231, 217, 0.85);
   overflow: hidden;
@@ -376,7 +385,7 @@ button:disabled {
 }
 
 .player-token:hover .player-card-tab {
-  transform: rotate(-90deg) translateX(-16px);
+  transform: rotate(-90deg) translateX(-10px);
   box-shadow: 0 12px 22px rgba(0, 0, 0, 0.36);
 }
 
@@ -389,8 +398,8 @@ button:disabled {
 
 .player-card-chip {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
+  right: 8px;
+  bottom: 8px;
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -401,6 +410,15 @@ button:disabled {
   font-size: 0.72rem;
   font-weight: 800;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.player-card-chip-icon {
+  width: 74%;
+  height: 74%;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.42));
 }
 
 .player-token.is-active-player .player-card-tab {
@@ -412,29 +430,30 @@ button:disabled {
 
 .player-hover-card {
   position: absolute;
-  left: 86px;
-  top: 50%;
-  transform: translateY(-50%) translateX(-6px);
+  left: 100px;
+  top: -2px;
+  transform: translateX(-6px);
   width: 236px;
   border: 1px solid #ceb596;
   border-radius: 12px;
   background: linear-gradient(180deg, #fff8ea, #f6e6ce);
-  padding: 0.6rem 0.7rem;
+  padding: 0.66rem 0.74rem;
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease, transform 120ms ease;
-  z-index: 5;
+  z-index: 20;
 }
 
 .player-token:hover .player-hover-card {
   opacity: 1;
-  transform: translateY(-50%) translateX(0);
+  transform: translateX(0);
 }
 
 .player-hover-card p {
   margin: 0.2rem 0;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
+  line-height: 1.22;
 }
 
 .action-stack {
@@ -484,8 +503,18 @@ button:disabled {
   flex-wrap: nowrap;
   gap: 0.5rem;
   overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 0.2rem;
+  min-height: 258px;
   align-items: flex-end;
+  scrollbar-gutter: stable both-edges;
+}
+
+.hand-cards.is-receiving .hand-card.is-incoming {
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+  animation: handReceiveIn 360ms ease-out forwards;
+  animation-delay: calc(var(--hand-index, 0) * 35ms + 180ms);
 }
 
 .hand-card {
@@ -498,7 +527,11 @@ button:disabled {
   display: grid;
   place-items: center;
   position: relative;
-  transition: transform 120ms ease, height 120ms ease, width 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    height 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    width 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 220ms ease;
   cursor: default;
   overflow: hidden;
 }
@@ -519,7 +552,7 @@ button:disabled {
   width: 180px;
   min-width: 180px;
   height: 252px;
-  transform: translateY(-8px);
+  transform: translateY(-6px);
   box-shadow: 0 10px 16px rgba(0, 0, 0, 0.25);
   z-index: 2;
 }
@@ -570,6 +603,18 @@ button:disabled {
   height: 156px;
 }
 
+.hand-card.is-selectable {
+  cursor: pointer;
+}
+
+.hand-card.is-selected {
+  box-shadow:
+    0 0 0 2px rgba(81, 194, 255, 0.95),
+    0 0 0 5px rgba(81, 194, 255, 0.35),
+    0 10px 16px rgba(0, 0, 0, 0.25);
+  transform: translateY(-6px);
+}
+
 .objective-svg-card.reveal {
   width: 280px;
   min-width: 280px;
@@ -587,45 +632,58 @@ button:disabled {
   position: absolute;
   left: 12%;
   right: 12%;
-  top: 31%;
-  max-height: 46%;
+  top: 35%;
+  bottom: 22%;
   overflow: hidden;
   text-align: center;
   color: #233646;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.4rem;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  align-content: start;
+  gap: 0.45rem;
 }
 
 .objective-svg-card.compact .objective-svg-overlay {
   left: 12%;
   right: 12%;
-  top: 28%;
+  top: 33%;
+  bottom: 18%;
 }
 
 .objective-svg-overlay h4 {
   margin: 0;
-  font-size: 0.94rem;
+  font-size: 0.9rem;
   line-height: 1.2;
   white-space: normal;
   word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .objective-svg-card.compact .objective-svg-overlay h4 {
-  font-size: 0.62rem;
+  font-size: 0.58rem;
 }
 
 .objective-svg-overlay p {
   margin: 0;
-  font-size: 0.74rem;
-  line-height: 1.22;
+  font-size: 0.72rem;
+  line-height: 1.2;
   white-space: normal;
   word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  line-clamp: 7;
+  -webkit-line-clamp: 7;
+  -webkit-box-orient: vertical;
 }
 
 .objective-svg-card.compact .objective-svg-overlay p {
-  font-size: 0.46rem;
+  font-size: 0.43rem;
+  line-clamp: 6;
+  -webkit-line-clamp: 6;
 }
 
 .objective-sticky {
@@ -654,7 +712,12 @@ button:disabled {
 }
 
 .deal-card.svg {
-  width: min(620px, 92%);
+  width: min(860px, 95vw);
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .deal-card h3 {
@@ -681,14 +744,21 @@ button:disabled {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transform: rotateY(180deg);
+  transform: rotateY(-180deg);
+  transform-origin: center center;
   will-change: transform;
 }
 
 .flip-card.flip-in .flip-card-inner {
-  animation: dealFlipReveal 760ms cubic-bezier(0.22, 0.72, 0.18, 1) forwards;
+  transform: rotateY(-360deg);
+  animation: dealFlipReveal 920ms cubic-bezier(0.22, 0.72, 0.18, 1) forwards;
   animation-delay: var(--flip-delay-ms, 0ms);
 }
+
+.flip-card.face-up .flip-card-inner {
+  transform: rotateY(-360deg);
+}
+
 
 .flip-face {
   position: absolute;
@@ -733,37 +803,60 @@ button:disabled {
   height: 402px;
 }
 
-.deal-territory-stack {
-  position: relative;
-  margin: 0.9rem auto 0.5rem;
-  width: min(300px, 70vw);
-  height: min(420px, 48vh);
+.deal-territory-grid-shell {
+  width: min(760px, 90vw);
+  max-height: min(62vh, 620px);
+  overflow: hidden;
 }
 
-.deal-territory-card {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 220px;
-  height: 308px;
+.deal-territory-grid {
+  margin: 0.8rem auto 0.5rem;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(0.28rem, 0.7vw, 0.45rem);
+  justify-items: center;
+}
+
+.deal-territory-grid.is-dense {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.deal-territory-grid.is-ultra-dense {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.deal-territory-cell {
+  width: min(100%, 108px);
+  aspect-ratio: 110 / 154;
   transform-origin: center center;
-  margin-left: -110px;
-  margin-top: -154px;
-  transition: transform 140ms ease;
 }
 
-.deal-territory-card .territory-svg-card {
+.deal-territory-cell.is-new {
+  animation: territoryCardPop 240ms ease-out;
+}
+
+.deal-territory-cell .territory-svg-card {
   width: 100%;
   height: 100%;
 }
 
-.deal-territory-card .flip-card {
+.deal-territory-cell .flip-card {
   width: 100%;
   height: 100%;
 }
 
-.deal-card.territories.to-hand .deal-territory-stack {
-  animation: flyToHand 620ms ease-in forwards;
+.deal-card.territories.to-hand .deal-territory-cell {
+  animation: flyToHand 720ms cubic-bezier(0.2, 0.62, 0.2, 1) forwards;
+  animation-delay: calc(var(--deal-index, 0) * 35ms);
+}
+
+.deal-card.territories.to-hand {
+  overflow: visible;
+}
+
+.deal-card.territories.to-hand .deal-territory-grid-shell {
+  overflow: visible;
 }
 
 .deal-territory-fallback {
@@ -909,27 +1002,47 @@ button:disabled {
 @keyframes flyToHand {
   from {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
   }
   to {
+    opacity: 0.58;
+    transform: translate3d(var(--fly-x, 0px), var(--fly-y, 260px), 0) scale(0.32) rotate(var(--fly-rot, -8deg));
+  }
+}
+
+@keyframes handReceiveIn {
+  from {
     opacity: 0;
-    transform: translate3d(0, 220px, 0) scale(0.3);
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes dealFlipReveal {
   0% {
     opacity: 0.95;
-    transform: rotateY(180deg) rotateX(5deg) scale(0.96);
-  }
-  48% {
-    transform: rotateY(88deg) rotateX(0deg) scale(1);
+    transform: rotateY(-180deg) scale(0.98);
   }
   100% {
     opacity: 1;
-    transform: rotateY(0deg) rotateX(0deg) scale(1);
+    transform: rotateY(-360deg) scale(1);
   }
 }
+
+@keyframes territoryCardPop {
+  from {
+    opacity: 0.86;
+    transform: translateY(7px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 
 @keyframes attackPulse {
   0% {
@@ -981,6 +1094,9 @@ button:disabled {
   left: 50%;
   top: 50%;
   transform-origin: center center;
+  will-change: auto;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .arena-map {
@@ -995,6 +1111,10 @@ button:disabled {
   display: block;
   width: min(92vw, 1480px);
   height: auto;
+  shape-rendering: geometricPrecision;
+  text-rendering: geometricPrecision;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 .map-label-overlay {
@@ -1013,15 +1133,128 @@ button:disabled {
   pointer-events: none;
 }
 
-.map-owner-chip text {
-  fill: #ffffff;
-  stroke: rgba(8, 14, 22, 0.9);
-  stroke-width: 1px;
-  paint-order: stroke;
+.map-attack-overlay {
+  position: absolute;
+  inset: 0;
+  width: min(92vw, 1480px);
+  height: auto;
+  pointer-events: none;
+}
+
+.map-reinforce-overlay {
+  position: absolute;
+  inset: 0;
+  width: min(92vw, 1480px);
+  height: auto;
+  pointer-events: none;
+}
+
+.map-attack-overlay .attack-link {
+  stroke: rgba(255, 96, 96, 0.9);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 7 6;
+  animation: attackPulse 1s ease-in-out infinite;
+  filter: drop-shadow(0 0 5px rgba(255, 95, 95, 0.58));
+}
+
+.map-attack-overlay .attack-link.selected {
+  stroke: #ff4545;
+  stroke-width: 3;
+  stroke-dasharray: 0;
+  animation: none;
+  filter: drop-shadow(0 0 10px rgba(255, 64, 64, 0.9));
+}
+
+.map-selection-overlay {
+  position: absolute;
+  inset: 0;
+  width: min(92vw, 1480px);
+  height: auto;
+  pointer-events: none;
+}
+
+.selected-source-marker circle {
+  fill: none;
+  stroke: #ffe176;
+  stroke-width: 2.2;
+  opacity: 0.95;
+}
+
+.selected-source-marker circle:last-child {
+  stroke: #fff3ae;
+  stroke-width: 1.8;
+  stroke-dasharray: 5 4;
+  animation: selectedMarkerPulse 0.9s ease-in-out infinite;
+}
+
+@keyframes selectedMarkerPulse {
+  0% {
+    opacity: 0.35;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 0.4;
+    transform: scale(0.98);
+  }
+}
+
+.map-reinforce-overlay .reinforce-controls {
+  pointer-events: none;
+}
+
+.map-reinforce-overlay .reinforce-svg-btn {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.map-reinforce-overlay .reinforce-svg-btn circle {
+  fill: rgba(246, 238, 224, 0.96);
+  stroke: rgba(145, 124, 94, 0.95);
+  stroke-width: 1.2px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+}
+
+.map-reinforce-overlay .reinforce-svg-btn.plus circle {
+  fill: rgba(218, 244, 216, 0.96);
+  stroke: rgba(104, 157, 98, 0.95);
+}
+
+.map-reinforce-overlay .reinforce-svg-btn.minus circle {
+  fill: rgba(245, 226, 222, 0.96);
+  stroke: rgba(166, 113, 104, 0.95);
+}
+
+.map-reinforce-overlay .reinforce-svg-btn text {
   text-anchor: middle;
   dominant-baseline: middle;
-  font-size: 9px;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: 7px;
   font-weight: 800;
+  fill: #243340;
+  stroke: none;
+  user-select: none;
+}
+
+.map-reinforce-overlay .reinforce-svg-btn.is-disabled {
+  opacity: 0.42;
+  pointer-events: none;
+}
+
+.map-owner-chip text {
+  fill: #ffffff;
+  stroke: rgba(8, 14, 22, 0.94);
+  stroke-width: 1.3px;
+  paint-order: stroke;
+  text-anchor: start;
+  dominant-baseline: middle;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
 }
 
 .map-owner-chip circle {
@@ -1030,17 +1263,23 @@ button:disabled {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.48));
 }
 
+.map-owner-chip image {
+  filter: drop-shadow(0 1px 2px rgba(3, 7, 14, 0.55));
+}
+
 .map-label-overlay text {
-  fill: #f3f8fb;
-  stroke: rgba(10, 18, 28, 0.9);
-  stroke-width: 1.8px;
+  fill: #f5efe0;
+  stroke: rgba(14, 21, 30, 0.95);
+  stroke-width: 1.7px;
   paint-order: stroke;
   text-anchor: middle;
   dominant-baseline: middle;
+  font-family: "Cinzel", "Bookman Old Style", "Times New Roman", serif;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  font-weight: 800;
+  letter-spacing: 0.018em;
   text-transform: capitalize;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 
 .arena-map svg .territory-region {
@@ -1061,51 +1300,64 @@ button:disabled {
 }
 
 .arena-map svg .territory-setup-owned {
-  stroke: #c9efff !important;
-  stroke-width: 2.35 !important;
-  stroke-dasharray: 4 3 !important;
-  filter: drop-shadow(0 0 8px rgba(162, 232, 255, 0.52));
+  stroke: #ffe176 !important;
+  stroke-width: 3.2 !important;
+  stroke-dasharray: 6 4 !important;
+  filter:
+    drop-shadow(0 0 11px rgba(255, 216, 95, 0.75))
+    drop-shadow(0 0 3px rgba(25, 20, 6, 0.6));
 }
 
 .arena-map svg .territory-selected-reinforce {
-  stroke: #7dffb2 !important;
-  stroke-width: 2.8 !important;
-  filter: drop-shadow(0 0 8px rgba(110, 255, 173, 0.62));
+  fill: color-mix(in srgb, var(--owner-color, #8ca0b2) 72%, #fff4b8 28%) !important;
+  stroke: #ffe176 !important;
+  stroke-width: 4 !important;
+  filter:
+    drop-shadow(0 0 13px rgba(255, 216, 95, 0.86))
+    drop-shadow(0 0 3px rgba(25, 20, 6, 0.62));
 }
 
 .arena-map svg .territory-attack-source,
 .arena-map svg .territory-selected-source {
-  stroke: #ffd85f !important;
-  stroke-width: 2.4 !important;
-  filter: drop-shadow(0 0 6px rgba(255, 216, 95, 0.6));
+  stroke: #ffe176 !important;
+  stroke-width: 3.5 !important;
+  filter:
+    drop-shadow(0 0 11px rgba(255, 216, 95, 0.8))
+    drop-shadow(0 0 3px rgba(25, 20, 6, 0.6));
 }
 
 .arena-map svg .territory-attack-target,
 .arena-map svg .territory-selected-target {
-  stroke: #ff6767 !important;
-  stroke-width: 2.55 !important;
-  stroke-dasharray: 7 4 !important;
+  stroke: #ff5a5a !important;
+  stroke-width: 3.5 !important;
+  stroke-dasharray: 8 4 !important;
   animation: attackPulse 1s ease-in-out infinite;
-  filter: drop-shadow(0 0 9px rgba(255, 95, 95, 0.72));
+  filter:
+    drop-shadow(0 0 14px rgba(255, 95, 95, 0.9))
+    drop-shadow(0 0 3px rgba(35, 10, 10, 0.62));
 }
 
 .arena-map svg .territory-selected-fortify-source {
-  stroke: #7fd9ff !important;
-  stroke-width: 2.45 !important;
-  filter: drop-shadow(0 0 8px rgba(127, 217, 255, 0.65));
+  stroke: #92e4ff !important;
+  stroke-width: 3 !important;
+  filter:
+    drop-shadow(0 0 10px rgba(127, 217, 255, 0.78))
+    drop-shadow(0 0 3px rgba(8, 23, 32, 0.58));
 }
 
 .arena-map svg .territory-selected-fortify-target {
-  stroke: #9de2ff !important;
-  stroke-width: 2.35 !important;
-  stroke-dasharray: 6 3 !important;
-  filter: drop-shadow(0 0 7px rgba(157, 226, 255, 0.58));
+  stroke: #a8e8ff !important;
+  stroke-width: 2.85 !important;
+  stroke-dasharray: 7 3 !important;
+  filter:
+    drop-shadow(0 0 9px rgba(157, 226, 255, 0.72))
+    drop-shadow(0 0 3px rgba(9, 20, 28, 0.58));
 }
 
 .map-zoom-tools {
   position: absolute;
-  right: 356px;
-  top: 70px;
+  left: 112px;
+  top: 84px;
   z-index: 7;
   display: flex;
   gap: 0.4rem;
@@ -1140,38 +1392,99 @@ button:disabled {
 
 .arena-left {
   position: absolute;
-  left: 10px;
-  top: 80px;
+  left: 8px;
+  top: 86px;
   z-index: 6;
 }
 
-.arena-right {
+.arena-chat-dock {
   position: absolute;
-  right: 10px;
-  top: 70px;
-  width: min(340px, 30vw);
-  max-height: calc(100vh - 220px);
-  overflow: auto;
+  right: 14px;
+  top: 84px;
+  width: min(310px, 28vw);
   z-index: 6;
-  background:
-    linear-gradient(180deg, rgba(252, 245, 231, 0.97), rgba(238, 220, 190, 0.95)),
-    radial-gradient(circle at 20% 8%, rgba(255, 255, 255, 0.35), transparent 40%);
-  border: 2px solid #b89569;
-  border-radius: 14px;
-  padding: 0.75rem;
-  box-shadow:
-    0 12px 26px rgba(0, 0, 0, 0.3),
-    inset 0 0 0 1px rgba(255, 248, 236, 0.72);
+  padding: 0.55rem;
+  border-radius: 12px;
+  border: 1px solid rgba(188, 153, 111, 0.85);
+  background: rgba(20, 28, 36, 0.68);
+  backdrop-filter: blur(3px);
 }
 
-.arena-right h3 {
-  margin: 0 0 0.5rem;
+.arena-command-hud {
+  position: absolute;
+  left: auto;
+  right: 14px;
+  top: 378px;
+  bottom: auto;
+  transform: none;
+  width: fit-content;
+  min-width: 240px;
+  max-width: min(560px, 28vw);
+  z-index: 6;
+  border-radius: 12px;
+  border: 1px solid rgba(158, 198, 219, 0.75);
+  background: linear-gradient(180deg, rgba(16, 33, 46, 0.92), rgba(21, 46, 63, 0.94));
+  color: #eaf5ff;
+  padding: 0.38rem 0.48rem;
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(140, 195, 224, 0.16);
+}
+
+.arena-command-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.22rem;
+  font-size: 0.76rem;
+}
+
+.arena-command-top.compact {
+  margin-bottom: 0.12rem;
+}
+
+.arena-command-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.arena-command-row select,
+.arena-command-row input {
+  min-width: 140px;
+  background: rgba(243, 249, 255, 0.95);
+}
+
+.arena-command-hud .phase-help {
+  margin: 0 0 0.42rem;
+  font-size: 0.82rem;
+  color: #d5e8f5;
+}
+
+.trade-panel {
+  border: 1px solid rgba(132, 182, 213, 0.4);
+  border-radius: 9px;
+  background: rgba(14, 27, 39, 0.54);
+  padding: 0.4rem 0.5rem;
+  margin-bottom: 0.26rem;
+}
+
+.trade-panel h4 {
+  margin: 0 0 0.2rem;
+  font-size: 0.85rem;
+  color: #f0f8ff;
+}
+
+.trade-panel .muted {
+  color: #d4e6f3;
 }
 
 .arena-bottom {
   position: absolute;
   left: 90px;
-  right: 360px;
+  right: 12px;
   bottom: 12px;
   z-index: 6;
 }
@@ -1180,10 +1493,22 @@ button:disabled {
   margin-top: 0;
 }
 
-.arena-status {
-  margin-top: 0.7rem;
-  font-size: 0.85rem;
-  color: #334d5c;
+.arena-status-pill {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: auto;
+  bottom: 274px;
+  z-index: 6;
+  width: fit-content;
+  max-width: min(760px, 72vw);
+  padding: 0.36rem 0.62rem;
+  border-radius: 8px;
+  border: 1px solid rgba(164, 189, 205, 0.78);
+  background: rgba(208, 227, 238, 0.9);
+  color: #253a49;
+  font-size: 0.82rem;
+  margin: 0;
 }
 
 .deal-overlay.global {
@@ -1192,12 +1517,214 @@ button:disabled {
   inset: 0;
 }
 
+.combat-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.capture-move-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+}
+
+.capture-move-popup {
+  width: min(460px, 90vw);
+  border-radius: 16px;
+  border: 2px solid #8f643a;
+  background:
+    linear-gradient(145deg, rgba(103, 69, 40, 0.97), rgba(69, 43, 23, 0.98)),
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.04) 0 10px,
+      rgba(0, 0, 0, 0.05) 10px 20px
+    );
+  box-shadow:
+    0 18px 32px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 232, 194, 0.22);
+  color: #f8efe0;
+  padding: 0.95rem 1rem 0.8rem;
+  text-align: center;
+}
+
+.capture-move-popup h3 {
+  margin: 0;
+}
+
+.capture-move-popup small {
+  color: #ebd8ba;
+}
+
+.capture-move-stepper {
+  margin: 0.65rem auto 0.45rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.capture-move-stepper .stepper-btn {
+  min-width: 38px;
+  min-height: 32px;
+  font-size: 1rem;
+}
+
+.capture-move-stepper .stepper-value {
+  min-width: 48px;
+  padding: 0.22rem 0.55rem;
+  border-color: rgba(255, 221, 173, 0.6);
+  background: rgba(255, 244, 220, 0.95);
+  color: #2b1b0e;
+}
+
+.combat-popup {
+  width: min(640px, 92vw);
+  border-radius: 16px;
+  border: 2px solid #8f643a;
+  background:
+    linear-gradient(145deg, rgba(103, 69, 40, 0.97), rgba(69, 43, 23, 0.98)),
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.04) 0 10px,
+      rgba(0, 0, 0, 0.05) 10px 20px
+    );
+  box-shadow:
+    0 18px 32px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 232, 194, 0.22);
+  color: #f8efe0;
+  padding: 0.9rem 1rem 0.75rem;
+}
+
+.combat-popup-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.8rem;
+  margin-bottom: 0.65rem;
+}
+
+.combat-popup-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.combat-popup-head small {
+  color: #ebd8ba;
+}
+
+.combat-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+}
+
+.combat-side {
+  border-radius: 12px;
+  border: 1px solid rgba(238, 204, 159, 0.34);
+  padding: 0.6rem 0.65rem;
+  background: rgba(27, 17, 10, 0.42);
+}
+
+.combat-side h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.combat-dice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+  min-height: 40px;
+}
+
+.dice-face {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 0.96rem;
+  font-weight: 900;
+  border: 1px solid rgba(15, 18, 24, 0.65);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+}
+
+.combat-side.attacker .dice-face {
+  background: linear-gradient(180deg, #f6f8fb, #e1e8ef);
+  color: #24364a;
+}
+
+.combat-side.defender .dice-face {
+  background: linear-gradient(180deg, #ffdede, #f6b8b8);
+  color: #631f1f;
+}
+
+.combat-popup.rolling .dice-face {
+  animation: diceRollPulse 0.22s ease-in-out infinite;
+}
+
+.combat-popup.resolved .dice-face.dice-win {
+  border-color: #74e19d;
+  box-shadow:
+    0 0 0 1px rgba(116, 225, 157, 0.38),
+    0 0 10px rgba(106, 231, 151, 0.58);
+  filter: saturate(1.12);
+}
+
+.combat-popup.resolved .dice-face.dice-loss {
+  border-color: #f08e8e;
+  box-shadow:
+    0 0 0 1px rgba(240, 142, 142, 0.3),
+    0 0 9px rgba(233, 96, 96, 0.42);
+  opacity: 0.8;
+}
+
+.combat-losses {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: #ffe6c5;
+}
+
+.combat-popup-foot {
+  margin-top: 0.65rem;
+  font-size: 0.8rem;
+  color: #f3dfbf;
+  text-align: center;
+}
+
+@keyframes diceRollPulse {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-1px) rotate(2deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
 @media (max-width: 1100px) {
-  .arena-right {
+  .arena-chat-dock {
     width: min(92vw, 420px);
     right: 8px;
     top: 72px;
-    max-height: 45vh;
+  }
+
+  .arena-command-hud {
+    width: min(92vw, 620px);
+    left: auto;
+    right: 8px;
+    top: 364px;
+    bottom: auto;
+    transform: none;
   }
 
   .arena-bottom {
@@ -1206,13 +1733,19 @@ button:disabled {
     bottom: 8px;
   }
 
+  .arena-status-pill {
+    max-width: min(92vw, 820px);
+    top: auto;
+    bottom: 280px;
+  }
+
   .arena-left {
     left: 8px;
     top: 72px;
   }
 
   .map-zoom-tools {
-    right: 8px;
+    left: 8px;
     top: 12px;
   }
 }

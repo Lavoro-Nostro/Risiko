@@ -8,6 +8,8 @@ public sealed record AttackResolvedEvent(
     string DefenderPlayerId,
     string FromTerritoryId,
     string ToTerritoryId,
+    IReadOnlyList<int> AttackerRolls,
+    IReadOnlyList<int> DefenderRolls,
     int AttackerLosses,
     int DefenderLosses
 ) : IGameEvent;

@@ -58,31 +58,31 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
     {
         if (!_matches.TryGetValue(matchId, out var session))
         {
-            return new SubmitCommandResponse(false, CommandErrorCode.Unknown, "Match not found.", 0);
+            return new SubmitCommandResponse(false, CommandErrorCode.Unknown, "Match not found.", 0, null);
         }
 
         lock (session.Sync)
         {
             if (!TryGetString(request.Payload, "commandId", out var commandId) || string.IsNullOrWhiteSpace(commandId))
             {
-                return new SubmitCommandResponse(false, CommandErrorCode.Unknown, "commandId is required in payload.", 0);
+                return new SubmitCommandResponse(false, CommandErrorCode.Unknown, "commandId is required in payload.", 0, null);
             }
 
             if (session.ProcessedCommandIds.Contains(commandId))
             {
-                return new SubmitCommandResponse(false, CommandErrorCode.Unknown, "Duplicate command id.", 0);
+                return new SubmitCommandResponse(false, CommandErrorCode.Unknown, "Duplicate command id.", 0, null);
             }
 
             var command = BuildCommand(matchId, request);
             if (command is null)
             {
-                return new SubmitCommandResponse(false, CommandErrorCode.Unknown, "Unsupported command payload.", 0);
+                return new SubmitCommandResponse(false, CommandErrorCode.Unknown, "Unsupported command payload.", 0, null);
             }
 
             var result = HandleCommand(session.Handler, session.State, command);
             if (!result.Validation.IsValid)
             {
-                return new SubmitCommandResponse(false, result.Validation.ErrorCode, result.Validation.ErrorMessage ?? "Rejected.", 0);
+                return new SubmitCommandResponse(false, result.Validation.ErrorCode, result.Validation.ErrorMessage ?? "Rejected.", 0, null);
             }
 
             var appliedEvents = result.EventEnvelopes
@@ -103,9 +103,22 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
                 }
             }
 
+            var attackResolution = appliedEvents
+                .OfType<AttackResolvedEvent>()
+                .Select(evt => new AttackResolutionPayload(
+                    evt.AttackerPlayerId,
+                    evt.DefenderPlayerId,
+                    evt.FromTerritoryId,
+                    evt.ToTerritoryId,
+                    evt.AttackerRolls,
+                    evt.DefenderRolls,
+                    evt.AttackerLosses,
+                    evt.DefenderLosses))
+                .LastOrDefault();
+
             session.ProcessedCommandIds.Add(commandId);
             session.State = result.State;
-            return new SubmitCommandResponse(true, CommandErrorCode.None, "Accepted.", appliedEvents.Count);
+            return new SubmitCommandResponse(true, CommandErrorCode.None, "Accepted.", appliedEvents.Count, attackResolution);
         }
     }
 
@@ -181,6 +194,13 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
                     matchId,
                     request.Payload.GetProperty("playerId").GetString() ?? string.Empty,
                     request.Payload.GetProperty("commandId").GetString() ?? string.Empty),
+                "movecapturedarmies" => new MoveCapturedArmiesCommand(
+                    matchId,
+                    request.Payload.GetProperty("playerId").GetString() ?? string.Empty,
+                    request.Payload.GetProperty("commandId").GetString() ?? string.Empty,
+                    request.Payload.GetProperty("fromTerritoryId").GetString() ?? string.Empty,
+                    request.Payload.GetProperty("toTerritoryId").GetString() ?? string.Empty,
+                    request.Payload.GetProperty("armiesToMoveTotal").GetInt32()),
                 _ => null
             };
         }
@@ -210,6 +230,7 @@ public sealed class InMemoryMatchSessionService : IMatchSessionService
             AttackCommand c => handler.Handle(state, c),
             FortifyCommand c => handler.Handle(state, c),
             EndTurnCommand c => handler.Handle(state, c),
+            MoveCapturedArmiesCommand c => handler.Handle(state, c),
             _ => CommandExecutionResult.Rejected(state, CommandErrorCode.Unknown, "Unsupported command type.")
         };
 

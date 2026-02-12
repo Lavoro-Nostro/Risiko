@@ -30,11 +30,47 @@ Dates are in ISO format (`YYYY-MM-DD`).
 - Integration coverage for ordered event flow and duplicate command rejection.
 - Manual multiplayer verification checklist (2/4/6 player scenarios).
 - Known issues register and MVP candidate release notes draft.
+- Dice combat popup (wood-box style) in `Risk.Web` with animated roll and server-authoritative final values.
+- Dice outcome highlighting (`win` / `loss`) per compared die after attack resolution.
+- Post-capture movement popup with `+/-` control to confirm armies moved into captured territory.
+- New command/event for capture-move finalization:
+- `MoveCapturedArmiesCommand`
+- `CapturedArmiesMovedEvent`
+- Attack response payload enrichment for UI:
+- host now includes attack-resolution details (attacker/defender rolls and losses) in command response.
+- Tris UI in `Risk.Web`: selectable hand cards (max 3), live validity check, and predicted reinforcement bonus display.
 
 ### Changed
 - `Risk.Web` now submits turn commands directly to `Risk.Host` via `POST /api/matches/{matchId}/commands`.
 - Control enablement is now phase-aware from authoritative host state.
 - Release-gate documentation now defines explicit evidence for MVP candidate decision.
+- Attack flow now blocks further attacks/end-turn while post-capture movement is pending.
+- Engine attack event now carries full dice roll arrays for attacker and defender.
+- Map panning update path now uses requestAnimationFrame scheduling for smoother interaction.
+- Map zoom-out bounds are more permissive for wider strategic view.
+- Attack preview links on the map are now shown only for the selected attack source territory.
+- In-game HUD layout refactored: large right panel removed, actions moved to compact action dock and chat moved to separate dock.
+- Setup ownership/selection highlights were aligned to the stronger attack-style visual language.
+- Fortify rule enforcement now matches classic objective profile strictly: one fortify movement per turn, with chosen army amount.
+- Fortify legality now requires adjacent owned territories (not multi-hop owned-path movement).
+- End-turn CTA labels now follow flow language (`Fine Attacchi` in attack, `Termina Turno` in movement).
+- Objective dealing now uses a non-fixed random seed by default, preventing identical objective repeats across new matches.
+- Objective bank was completed and localized (Italian titles/descriptions), including all canonical objective categories.
+- Eliminate-objective assignment now targets real player colors present in match and avoids incompatible cards when dealing.
+- Trade-in (`tris`) rules now follow classic objective profile combos with explicit bonus values and territory-ownership bonus.
+- Territory deal animation flow reworked: objective/territory reveal pacing adjusted, full-back territory spread, sequential flips, and visual hand-receive transition.
+- Map zoom interaction now anchors to pointer position (wheel zoom focuses where cursor points).
+- Map zoom-out lower bound now prevents excessive shrink while still allowing a wider strategic view.
+- In-match player side cards/hover stats spacing and overlap behavior improved.
+- Territory label layout pipeline now uses multiline fallback and per-territory tuning offsets for dense regions.
+
+### Fixed
+- Player card SVG center tank fallback replaced with color-specific tank PNG rendering for all player cards.
+- Card flip reliability and objective-card text overlap issues addressed in web reveal flow.
+- Post-capture movement popup now waits briefly after dice resolution popup closes, reducing overlap and input conflicts.
+- Map interaction rendering sharpened (pixel-rounded pan offsets and rendering precision tuning) to reduce blur while dragging/zooming.
+- Fixed card-deal modal overflow and improved fly-to-hand visibility timing.
+- Fixed multiple territory-name and marker collisions by separating label/tank anchors and reducing label oversizing in compact regions.
 
 ### Code Traceability
 - RIS-STEP-016:
@@ -57,6 +93,18 @@ Dates are in ISO format (`YYYY-MM-DD`).
 - `docs/06-quality/mvp-candidate-release-notes.md`
 - `docs/07-planning/known-issues.md`
 - `WORK_TRACKING.md`
+- Dice/capture flow update:
+- `Risk.Engine/Application/GameCommandHandler.cs`
+- `Risk.Engine/Contracts/Events/AttackResolvedEvent.cs`
+- `Risk.Engine/Contracts/Commands/MoveCapturedArmiesCommand.cs`
+- `Risk.Engine/Contracts/Events/CapturedArmiesMovedEvent.cs`
+- `Risk.Engine/Domain/State/GameState.cs`
+- `Risk.Engine/Application/EventSourcing/GameStateProjector.cs`
+- `Risk.Host/Gameplay/InMemoryMatchSessionService.cs`
+- `Risk.Host/Gameplay/MatchSessionContracts.cs`
+- `Risk.Web/src/App.tsx`
+- `Risk.Web/src/styles.css`
+- `docs/02-game-design/combat-spec.md`
 
 ## [0.3.0] - 2026-02-10
 ### Added

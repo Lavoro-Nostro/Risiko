@@ -24,6 +24,7 @@ public static class GameStateProjector
             ReinforcementsPlacedEvent e => ApplyReinforcementsPlaced(state, e),
             AttackResolvedEvent e => ApplyAttackResolved(state, e),
             TerritoryCapturedEvent e => ApplyTerritoryCaptured(state, e),
+            CapturedArmiesMovedEvent e => ApplyCapturedArmiesMoved(state, e),
             PlayerEliminatedEvent e => ApplyPlayerEliminated(state, e),
             TurnEndedEvent e => ApplyTurnEnded(state, e),
             ObjectiveCompletedEvent e => ApplyObjectiveCompleted(state, e),
@@ -44,7 +45,8 @@ public static class GameStateProjector
             ActivePlayerId = evt.ActivePlayerId,
             TurnIndex = evt.TurnIndex,
             Phase = parsedPhase,
-            TerritoryCapturedThisTurn = false
+            TerritoryCapturedThisTurn = false,
+            FortifyUsedThisTurn = false
         };
     }
 
@@ -113,6 +115,23 @@ public static class GameStateProjector
         return next
             .SetTerritoryState(updatedCaptured)
             .MarkTerritoryCaptured(true);
+    }
+
+    private static GameState ApplyCapturedArmiesMoved(GameState state, CapturedArmiesMovedEvent evt)
+    {
+        if (!state.TryGetTerritory(evt.FromTerritoryId, out var fromTerritory) || fromTerritory is null ||
+            !state.TryGetTerritory(evt.ToTerritoryId, out var toTerritory) || toTerritory is null)
+        {
+            return state;
+        }
+
+        var updatedFrom = fromTerritory with { Armies = evt.ArmiesInSourceTerritory };
+        var updatedTo = toTerritory with { Armies = evt.ArmiesInCapturedTerritory };
+
+        return state
+            .SetTerritoryState(updatedFrom)
+            .SetTerritoryState(updatedTo)
+            .ClearPendingCaptureMove();
     }
 
     private static GameState ApplyTurnEnded(GameState state, TurnEndedEvent evt) =>

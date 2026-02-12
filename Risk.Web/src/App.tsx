@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { labelForTerritory, worldClassic } from "./map/worldClassic";
 import objectiveCardTemplateRaw from "@packs/maps/world-classic/cards/objective/objective_card_blank.svg?raw";
 import jokerCardRaw from "@packs/maps/world-classic/cards/joker/joker_card.svg?raw";
@@ -10,20 +10,69 @@ import playerCardYellow from "@packs/maps/world-classic/cards/player/player_card
 import playerCardGreen from "@packs/maps/world-classic/cards/player/player_card_green.svg";
 import playerCardBlue from "@packs/maps/world-classic/cards/player/player_card_blue.svg";
 import playerCardBlack from "@packs/maps/world-classic/cards/player/player_card_black.svg";
+import tankRed from "@packs/CarrarRo.png";
+import tankPurple from "@packs/CarrarVi.png";
+import tankYellow from "@packs/CarrarGi.png";
+import tankGreen from "@packs/CarrarVe.png";
+import tankBlue from "@packs/CarrarBl.png";
+import tankBlack from "@packs/CarrarNe.png";
 
 type Screen = "splash" | "portal" | "hostLobby" | "joinLobby" | "game";
 
 type TerritoryOverlay = {
   id: string;
   text: string;
+  textLines: string[];
   centerX: number;
   centerY: number;
+  chipY: number;
   chipRadius: number;
   labelX: number;
   labelY: number;
   labelFontSize: number;
   labelWidth: number;
   labelHeight: number;
+};
+
+type OverlayTuning = {
+  labelDx?: number;
+  labelDy?: number;
+  chipDx?: number;
+  chipDy?: number;
+  fontScale?: number;
+};
+
+const TERRITORY_OVERLAY_TUNING: Record<string, OverlayTuning> = {
+  north_west_territory: { labelDx: -4, labelDy: -5, fontScale: 0.9 },
+  ontario: { labelDx: 5, labelDy: 2, fontScale: 0.86 },
+  quebec: { labelDx: 8, labelDy: -2, fontScale: 0.88 },
+  western_united_states: { labelDx: -7, labelDy: 3, fontScale: 0.85 },
+  eastern_united_states: { labelDx: 8, labelDy: 3, fontScale: 0.85 },
+  central_america: { labelDy: 6, fontScale: 0.86 },
+  venezuela: { labelDx: -6, labelDy: -2, fontScale: 0.9 },
+  peru: { labelDx: -8, labelDy: 3, fontScale: 0.88 },
+  brazil: { labelDx: 8, labelDy: 3, fontScale: 0.88 },
+  argentina: { labelDy: 8, fontScale: 0.9 },
+  iceland: { labelDx: -8, labelDy: -4, fontScale: 0.82, chipDy: -3 },
+  great_britain: { labelDx: -12, labelDy: 8, fontScale: 0.82 },
+  northern_europe: { labelDx: 10, labelDy: 5, fontScale: 0.82 },
+  western_europe: { labelDx: -14, labelDy: 10, fontScale: 0.8 },
+  southern_europe: { labelDx: 0, labelDy: 12, fontScale: 0.8 },
+  north_africa: { labelDx: -8, labelDy: 4, fontScale: 0.86 },
+  east_africa: { labelDx: 10, labelDy: 4, fontScale: 0.86 },
+  congo: { labelDx: -8, labelDy: -2, fontScale: 0.86 },
+  south_africa: { labelDy: 8, fontScale: 0.86 },
+  madagascar: { labelDx: 7, labelDy: 8, fontScale: 0.8, chipDx: 2, chipDy: -2 },
+  middle_east: { labelDy: 8, fontScale: 0.86 },
+  afghanistan: { labelDx: 8, labelDy: 2, fontScale: 0.84 },
+  india: { labelDy: 10, fontScale: 0.86 },
+  siam: { labelDx: 8, labelDy: 7, fontScale: 0.82, chipDy: -2 },
+  indonesia: { labelDx: 8, labelDy: 10, fontScale: 0.8, chipDy: -2 },
+  new_guinea: { labelDx: 10, labelDy: 2, fontScale: 0.78, chipDx: 2, chipDy: -2 },
+  japan: { labelDx: 10, labelDy: -2, fontScale: 0.8, chipDx: 2, chipDy: -2 },
+  kamchatka: { labelDx: 10, labelDy: -3, fontScale: 0.82, chipDx: 3, chipDy: -2 },
+  western_australia: { labelDx: -12, labelDy: 8, fontScale: 0.8 },
+  eastern_australia: { labelDx: 12, labelDy: 8, fontScale: 0.8 }
 };
 
 type HostTerritoryState = {
@@ -64,7 +113,14 @@ type HostGameState = {
   territories: Record<string, HostTerritoryState>;
   objectivesByPlayerId?: Record<string, HostObjectiveState>;
   cardIdsByPlayerId?: Record<string, string[]>;
+  cardSymbolById?: Record<string, string>;
+  tradeBonusStep?: number;
   winnerPlayerId?: string | null;
+  fortifyUsedThisTurn?: boolean;
+  pendingCaptureFromTerritoryId?: string | null;
+  pendingCaptureToTerritoryId?: string | null;
+  pendingCaptureMinArmies?: number;
+  pendingCaptureMaxArmies?: number;
 };
 
 type MatchStateResponse = {
@@ -133,12 +189,43 @@ type SubmitCommandResponse = {
   errorCode: number;
   message: string;
   appliedEventCount: number;
+  attackResolution?: AttackResolutionPayload | null;
+};
+
+type HostEventMessage = {
+  sequence: number;
+  roomId: string;
+  hostPeerId: string;
+  type: string;
+  payload: string;
+  createdAtUtc: string;
+};
+
+type ChatEventPayload = {
+  authorPeerId: string;
+  authorDisplayName: string;
+  text: string;
+  sentAtUtc: string;
+};
+
+type AttackResolutionPayload = {
+  attackerPlayerId: string;
+  defenderPlayerId: string;
+  fromTerritoryId: string;
+  toTerritoryId: string;
+  attackerRolls: number[];
+  defenderRolls: number[];
+  attackerLosses: number;
+  defenderLosses: number;
 };
 
 const PREF_KEY = "RisiKo!.ui.v4";
 const PLAYER_COLORS = ["#e43c39", "#7d49dc", "#e6c42b", "#2ecb4f", "#2a6ae0", "#141414"];
 const PLAYER_CARD_ASSETS = [playerCardRed, playerCardPurple, playerCardYellow, playerCardGreen, playerCardBlue, playerCardBlack];
-const OBJECTIVE_CARD_BASE = objectiveCardTemplateRaw.replace("Testo missione qui", "");
+const PLAYER_TANK_ASSETS = [tankRed, tankPurple, tankYellow, tankGreen, tankBlue, tankBlack];
+const OBJECTIVE_CARD_BASE = objectiveCardTemplateRaw
+  .replace("Titolo Missione", "")
+  .replace("Testo missione qui", "");
 const territoryCardModules = import.meta.glob("@packs/maps/world-classic/cards/territory/*.svg", {
   eager: true,
   import: "default",
@@ -207,6 +294,59 @@ function prettyCardName(cardId: string): string {
   return cardId;
 }
 
+function cardSymbolLabel(symbol: string): string {
+  switch (symbol.toLowerCase()) {
+    case "infantry":
+      return "Fante";
+    case "cavalry":
+      return "Cavalleria";
+    case "artillery":
+      return "Artiglieria";
+    case "joker":
+      return "Jolly";
+    default:
+      return symbol;
+  }
+}
+
+function evaluateTrisSelection(symbols: string[]): { valid: boolean; baseBonus: number; reason: string } {
+  if (symbols.length !== 3) {
+    return { valid: false, baseBonus: 0, reason: "Seleziona 3 carte." };
+  }
+  const normalized = symbols.map(value => value.toLowerCase());
+  const jokerCount = normalized.filter(value => value === "joker").length;
+  if (jokerCount > 1) {
+    return { valid: false, baseBonus: 0, reason: "Massimo 1 jolly nel tris." };
+  }
+  const nonJoker = normalized.filter(value => value !== "joker");
+  if (nonJoker.length === 3) {
+    const distinct = new Set(nonJoker);
+    if (distinct.size === 1) {
+      const symbol = nonJoker[0];
+      if (symbol === "artillery") {
+        return { valid: true, baseBonus: 4, reason: "Tris artiglieria" };
+      }
+      if (symbol === "infantry") {
+        return { valid: true, baseBonus: 6, reason: "Tris fanteria" };
+      }
+      if (symbol === "cavalry") {
+        return { valid: true, baseBonus: 8, reason: "Tris cavalleria" };
+      }
+      return { valid: false, baseBonus: 0, reason: "Simboli non validi." };
+    }
+    if (distinct.size === 3) {
+      return { valid: true, baseBonus: 10, reason: "Tris misto" };
+    }
+    return { valid: false, baseBonus: 0, reason: "Combinazione non valida." };
+  }
+
+  if (jokerCount === 1 && nonJoker.length === 2 && nonJoker[0] === nonJoker[1]) {
+    return { valid: true, baseBonus: 12, reason: "Jolly + coppia uguale" };
+  }
+
+  return { valid: false, baseBonus: 0, reason: "Combinazione non valida." };
+}
+
 function phaseLabel(phase: string): string {
   switch (phase) {
     case "setup":
@@ -230,6 +370,10 @@ function commandLabel(type: string): string {
       return "attacco";
     case "Fortify":
       return "fortificazione";
+    case "PlayCards":
+      return "cambio tris";
+    case "MoveCapturedArmies":
+      return "spostamento post conquista";
     case "EndTurn":
       return "fine turno";
     default:
@@ -237,8 +381,42 @@ function commandLabel(type: string): string {
   }
 }
 
+function continentLabel(continentId: string): string {
+  switch (continentId) {
+    case "north_america":
+      return "Nord America";
+    case "south_america":
+      return "Sud America";
+    case "europe":
+      return "Europa";
+    case "africa":
+      return "Africa";
+    case "asia":
+      return "Asia";
+    case "australia":
+      return "Oceania";
+    default:
+      return continentId;
+  }
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function normalizeLoopedOffsetX(x: number, mapWorldWidth: number): number {
+  if (!Number.isFinite(mapWorldWidth) || mapWorldWidth <= 0) {
+    return x;
+  }
+  const half = mapWorldWidth / 2;
+  let next = x;
+  while (next > half) {
+    next -= mapWorldWidth;
+  }
+  while (next < -half) {
+    next += mapWorldWidth;
+  }
+  return next;
 }
 
 function boxesOverlap(
@@ -255,6 +433,29 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function splitTerritoryLabel(text: string): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 1 || text.length <= 12) {
+    return [text];
+  }
+  const lines: string[] = [];
+  let current = "";
+  const maxCharsPerLine = 13;
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxCharsPerLine || !current) {
+      current = next;
+      continue;
+    }
+    lines.push(current);
+    current = word;
+  }
+  if (current) {
+    lines.push(current);
+  }
+  return lines.slice(0, 3);
 }
 
 function toTerritoryFileBase(territoryId: string): string {
@@ -298,46 +499,34 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return (await response.json()) as T;
 }
 
-function canReachOwnedTarget(
+function canFortifyAdjacent(
   territories: Record<string, HostTerritoryState>,
   playerId: string,
   fromId: string,
   toId: string
 ): boolean {
-  if (fromId === toId) {
-    return true;
+  const from = territories[fromId];
+  const to = territories[toId];
+  if (!from || !to) {
+    return false;
   }
-  const visited = new Set<string>([fromId]);
-  const queue: string[] = [fromId];
-  while (queue.length > 0) {
-    const currentId = queue.shift()!;
-    const current = territories[currentId];
-    if (!current) {
-      continue;
-    }
-    for (const nextId of current.neighborTerritoryIds) {
-      if (visited.has(nextId)) {
-        continue;
-      }
-      const next = territories[nextId];
-      if (!next || next.ownerPlayerId !== playerId) {
-        continue;
-      }
-      if (nextId === toId) {
-        return true;
-      }
-      visited.add(nextId);
-      queue.push(nextId);
-    }
-  }
-  return false;
+  return from.ownerPlayerId === playerId &&
+    to.ownerPlayerId === playerId &&
+    from.neighborTerritoryIds.includes(toId);
 }
 
 function App() {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
+  const chatLastSequenceRef = useRef(0);
   const dealStartedMatchRef = useRef<string | null>(null);
   const dealTimerIdsRef = useRef<number[]>([]);
+  const dealCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const handCardsRef = useRef<HTMLDivElement | null>(null);
+  const combatRollIntervalRef = useRef<number | null>(null);
+  const combatCloseTimerRef = useRef<number | null>(null);
+  const panRafRef = useRef<number | null>(null);
+  const pendingPanOffsetRef = useRef<{ x: number; y: number } | null>(null);
 
   const boot = useMemo(() => {
     try {
@@ -378,8 +567,24 @@ function App() {
   const [dealMatchId, setDealMatchId] = useState("");
   const [revealedTerritories, setRevealedTerritories] = useState<string[]>([]);
   const [dealtTerritoryOrder, setDealtTerritoryOrder] = useState<string[]>([]);
+  const [territoryFlipCount, setTerritoryFlipCount] = useState(0);
   const [dealFlyToHand, setDealFlyToHand] = useState(false);
   const [setupDeckVisible, setSetupDeckVisible] = useState(true);
+  const [dealFlyVectors, setDealFlyVectors] = useState<Record<string, { x: number; y: number; rot: number }>>({});
+  const [combatPopup, setCombatPopup] = useState<{
+    visible: boolean;
+    rolling: boolean;
+    attackerPlayerId: string;
+    defenderPlayerId: string;
+    fromTerritoryId: string;
+    toTerritoryId: string;
+    attackerLosses: number;
+    defenderLosses: number;
+    attackerRolls: number[];
+    defenderRolls: number[];
+  } | null>(null);
+  const [captureMoveArmies, setCaptureMoveArmies] = useState(1);
+  const [captureMoveReady, setCaptureMoveReady] = useState(false);
   const [mapScale, setMapScale] = useState(1);
   const [mapMinScale, setMapMinScale] = useState(1);
   const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
@@ -390,40 +595,244 @@ function App() {
   const [hoverTerritoryId, setHoverTerritoryId] = useState("");
 
   const [reinforceTerritoryId, setReinforceTerritoryId] = useState("");
-  const [reinforceArmies, setReinforceArmies] = useState(1);
   const [attackFromId, setAttackFromId] = useState("");
   const [attackToId, setAttackToId] = useState("");
   const [attackDice, setAttackDice] = useState(1);
   const [fortifyFromId, setFortifyFromId] = useState("");
   const [fortifyToId, setFortifyToId] = useState("");
   const [fortifyArmies, setFortifyArmies] = useState(1);
+  const [selectedTradeCardIds, setSelectedTradeCardIds] = useState<string[]>([]);
 
   const currentPhase = parsePhase(state?.phase);
   const myObjective = state?.objectivesByPlayerId?.[playerId];
-  const objectiveTarget = myObjective?.targetTerritoryCount ?? null;
   const territoryList = Object.values(state?.territories ?? {});
   const ownedTerritories = territoryList.filter(territory => territory.ownerPlayerId === playerId);
-  const objectiveOwned = ownedTerritories.length;
-  const objectiveRemaining = objectiveTarget === null ? null : Math.max(0, objectiveTarget - objectiveOwned);
   const handCount = state?.cardIdsByPlayerId?.[playerId]?.length ?? 0;
   const myCards = state?.cardIdsByPlayerId?.[playerId] ?? [];
   const ownedTerritoryIds = ownedTerritories.map(territory => territory.territoryId);
   const ownedTerritoryIdSet = useMemo(() => new Set(ownedTerritoryIds), [ownedTerritoryIds]);
   const setupComplete = isLikelySetupComplete(state, currentPhase);
+  const isDealOverlayActive = dealStage !== "idle";
+  const hideHandDuringDeal = dealStage === "objective" || dealStage === "territories";
   const isMyTurn = !!state && state.activePlayerId === playerId;
   const isHostInLobby = !!roomSnapshot && roomSnapshot.hostPeerId === peerId;
   const activePlayer = state?.players.find(player => player.playerId === state.activePlayerId);
   const activePlayerLabel = activePlayer
     ? `${activePlayer.displayName} (${activePlayer.playerId})`
     : state?.activePlayerId ?? "-";
+  const combatAttackerLabel = combatPopup
+    ? (state?.players.find(player => player.playerId === combatPopup.attackerPlayerId)?.displayName ?? combatPopup.attackerPlayerId)
+    : "";
+  const combatDefenderLabel = combatPopup
+    ? (state?.players.find(player => player.playerId === combatPopup.defenderPlayerId)?.displayName ?? combatPopup.defenderPlayerId)
+    : "";
+  const combatDiceOutcome = useMemo(() => {
+    if (!combatPopup || combatPopup.rolling) {
+      return { attacker: [] as Array<"win" | "loss" | "none">, defender: [] as Array<"win" | "loss" | "none"> };
+    }
+    const compareCount = Math.min(combatPopup.attackerRolls.length, combatPopup.defenderRolls.length);
+    const attacker: Array<"win" | "loss" | "none"> = combatPopup.attackerRolls.map(() => "none");
+    const defender: Array<"win" | "loss" | "none"> = combatPopup.defenderRolls.map(() => "none");
+
+    for (let index = 0; index < compareCount; index++) {
+      if (combatPopup.attackerRolls[index] > combatPopup.defenderRolls[index]) {
+        attacker[index] = "win";
+        defender[index] = "loss";
+      } else {
+        attacker[index] = "loss";
+        defender[index] = "win";
+      }
+    }
+
+    return { attacker, defender };
+  }, [combatPopup]);
   const phaseInstruction =
     currentPhase === "setup"
       ? "Setup iniziale: piazza fino a 3 rinforzi totali sul tuo turno (solo su territori posseduti). Il turno passa quando finisci i rinforzi disponibili."
       : currentPhase === "reinforcement"
       ? "Piazza tutti i rinforzi disponibili, poi premi Fine / Prossimo."
       : currentPhase === "attack"
-        ? "Attacca uno o piu territori adiacenti, oppure premi Fine / Prossimo."
-        : "Fortifica una volta (opzionale), poi premi Fine / Prossimo.";
+        ? "Attacca uno o piu territori adiacenti, poi premi Fine Attacchi."
+        : "Fase movimento: una sola volta (opzionale), sposta quante armate vuoi tra territori adiacenti lasciandone almeno 1 in origine, poi termina turno.";
+  const hasPendingCaptureMove =
+    currentPhase === "attack" &&
+    !!state?.pendingCaptureFromTerritoryId &&
+    !!state?.pendingCaptureToTerritoryId;
+  const pendingCaptureFrom = state?.pendingCaptureFromTerritoryId ?? "";
+  const pendingCaptureTo = state?.pendingCaptureToTerritoryId ?? "";
+  const pendingCaptureMinArmies = Math.max(1, state?.pendingCaptureMinArmies ?? 1);
+  const pendingCaptureMaxArmies = Math.max(pendingCaptureMinArmies, state?.pendingCaptureMaxArmies ?? pendingCaptureMinArmies);
+  const selectedTradeSymbols = selectedTradeCardIds.map(cardId => state?.cardSymbolById?.[cardId] ?? "");
+  const trisEvaluation = evaluateTrisSelection(selectedTradeSymbols);
+  const ownedTerritoryTradeBonus = selectedTradeCardIds.filter(cardId =>
+    cardId.startsWith("territory:") &&
+    ownedTerritoryIdSet.has(cardId.replace("territory:", ""))).length * 2;
+  const trisTotalBonus = trisEvaluation.valid ? trisEvaluation.baseBonus + ownedTerritoryTradeBonus : 0;
+  const objectiveProgressLabel = useMemo(() => {
+    if (!state || !myObjective) {
+      return "";
+    }
+
+    if (myObjective.kind === "continent_combo") {
+      const requiredIds = myObjective.requiredContinentIds ?? [];
+      const missingRequired = requiredIds.filter(continentId => {
+        const continent = state.continents?.find(value => value.id === continentId);
+        if (!continent) {
+          return true;
+        }
+        return !continent.territoryIds.every(id => state.territories[id]?.ownerPlayerId === playerId);
+      });
+
+      const requiredSet = new Set(requiredIds);
+      const ownedAdditional = (state.continents ?? []).filter(continent => {
+        if (requiredSet.has(continent.id)) {
+          return false;
+        }
+        return continent.territoryIds.every(id => state.territories[id]?.ownerPlayerId === playerId);
+      }).length;
+      const additionalRequired = Math.max(0, myObjective.requiredAdditionalContinentCount ?? 0);
+      const additionalMissing = Math.max(0, additionalRequired - ownedAdditional);
+
+      const chunks: string[] = [];
+      if (missingRequired.length > 0) {
+        chunks.push(`Continenti richiesti mancanti: ${missingRequired.map(continentLabel).join(", ")}`);
+      }
+      if (additionalRequired > 0) {
+        chunks.push(`Continente extra mancante: ${additionalMissing}`);
+      }
+      if (chunks.length === 0) {
+        return "Obiettivo continenti completato";
+      }
+      return chunks.join(" | ");
+    }
+
+    if (myObjective.kind === "territory_with_min_armies") {
+      const threshold = Math.max(1, myObjective.requiredArmiesPerTerritory ?? 1);
+      const qualified = ownedTerritories.filter(territory => territory.armies >= threshold).length;
+      const target = Math.max(0, myObjective.targetTerritoryCount);
+      return `Territori ${threshold}+ armate mancanti: ${Math.max(0, target - qualified)}`;
+    }
+
+    if (myObjective.kind === "territory_count") {
+      const target = Math.max(0, myObjective.targetTerritoryCount);
+      return `Territori obiettivo mancanti: ${Math.max(0, target - ownedTerritories.length)}`;
+    }
+
+    if (myObjective.kind === "eliminate_player") {
+      const targetPlayerId = myObjective.eliminateTargetPlayerId;
+      if (!targetPlayerId) {
+        return "";
+      }
+      const stillAlive = Object.values(state.territories).some(territory => territory.ownerPlayerId === targetPlayerId);
+      return stillAlive ? "Obiettivo eliminazione: bersaglio ancora in gioco" : "Obiettivo eliminazione completato";
+    }
+
+    return "";
+  }, [myObjective, ownedTerritories, playerId, state]);
+
+  const clearCombatTimers = useCallback(() => {
+    if (combatRollIntervalRef.current !== null) {
+      window.clearInterval(combatRollIntervalRef.current);
+      combatRollIntervalRef.current = null;
+    }
+    if (combatCloseTimerRef.current !== null) {
+      window.clearTimeout(combatCloseTimerRef.current);
+      combatCloseTimerRef.current = null;
+    }
+  }, []);
+
+  const schedulePanOffset = useCallback((x: number, y: number) => {
+    const baseMapWidth = mapRef.current?.clientWidth
+      ?? Math.min((mapViewportRef.current?.clientWidth ?? window.innerWidth) * 0.92, 1480);
+    const mapWorldWidth = baseMapWidth * Math.max(0.1, mapScale);
+    pendingPanOffsetRef.current = {
+      x: Math.round(normalizeLoopedOffsetX(x, mapWorldWidth)),
+      y: Math.round(y)
+    };
+    if (panRafRef.current !== null) {
+      return;
+    }
+    panRafRef.current = window.requestAnimationFrame(() => {
+      panRafRef.current = null;
+      const next = pendingPanOffsetRef.current;
+      pendingPanOffsetRef.current = null;
+      if (!next) {
+        return;
+      }
+      setMapOffset(current => {
+        if (current.x === next.x && current.y === next.y) {
+          return current;
+        }
+        return next;
+      });
+    });
+  }, [mapScale]);
+
+  const randomDice = useCallback((count: number) => {
+    const rolls: number[] = [];
+    for (let i = 0; i < count; i++) {
+      rolls.push(1 + Math.floor(Math.random() * 6));
+    }
+    return rolls;
+  }, []);
+
+  const showCombatResolutionPopup = useCallback(
+    (resolution: AttackResolutionPayload) => {
+      clearCombatTimers();
+
+      const attackerCount = Math.max(1, resolution.attackerRolls.length);
+      const defenderCount = Math.max(1, resolution.defenderRolls.length);
+      setCombatPopup({
+        visible: true,
+        rolling: true,
+        attackerPlayerId: resolution.attackerPlayerId,
+        defenderPlayerId: resolution.defenderPlayerId,
+        fromTerritoryId: resolution.fromTerritoryId,
+        toTerritoryId: resolution.toTerritoryId,
+        attackerLosses: resolution.attackerLosses,
+        defenderLosses: resolution.defenderLosses,
+        attackerRolls: randomDice(attackerCount),
+        defenderRolls: randomDice(defenderCount)
+      });
+
+      combatRollIntervalRef.current = window.setInterval(() => {
+        setCombatPopup(current => {
+          if (!current || !current.visible || !current.rolling) {
+            return current;
+          }
+          return {
+            ...current,
+            attackerRolls: randomDice(attackerCount),
+            defenderRolls: randomDice(defenderCount)
+          };
+        });
+      }, 90);
+
+      window.setTimeout(() => {
+        if (combatRollIntervalRef.current !== null) {
+          window.clearInterval(combatRollIntervalRef.current);
+          combatRollIntervalRef.current = null;
+        }
+        setCombatPopup(current => {
+          if (!current) {
+            return current;
+          }
+          return {
+            ...current,
+            rolling: false,
+            attackerRolls: [...resolution.attackerRolls],
+            defenderRolls: [...resolution.defenderRolls]
+          };
+        });
+
+        combatCloseTimerRef.current = window.setTimeout(() => {
+          setCombatPopup(current => (current ? { ...current, visible: false } : current));
+          combatCloseTimerRef.current = null;
+        }, 2200);
+      }, 900);
+    },
+    [clearCombatTimers, randomDice]
+  );
 
   const playerRows = useMemo(() => {
     if (!state) {
@@ -442,6 +851,7 @@ function App() {
         player,
         color: PLAYER_COLORS[index % PLAYER_COLORS.length],
         cardAsset: PLAYER_CARD_ASSETS[index % PLAYER_CARD_ASSETS.length],
+        tankAsset: PLAYER_TANK_ASSETS[index % PLAYER_TANK_ASSETS.length],
         owned,
         nextRound,
         cardCount: state.cardIdsByPlayerId?.[player.playerId]?.length ?? 0,
@@ -453,6 +863,8 @@ function App() {
   const attackSourceOptions = ownedTerritories.filter(territory => territory.armies > 1);
   const attackSourceIdSet = useMemo(() => new Set(attackSourceOptions.map(territory => territory.territoryId)), [attackSourceOptions]);
   const selectedAttackSource = state?.territories?.[attackFromId];
+  const attackDiceMax = Math.max(1, Math.min(3, Math.max(1, (selectedAttackSource?.armies ?? 2) - 1)));
+  const attackDiceOptions = [1, 2, 3].filter(value => value <= attackDiceMax);
   const attackTargetOptions =
     selectedAttackSource?.neighborTerritoryIds
       .map(id => state?.territories?.[id])
@@ -463,9 +875,8 @@ function App() {
     if (!state || !fortifyFromId || territory.territoryId === fortifyFromId) {
       return false;
     }
-    return canReachOwnedTarget(state.territories, playerId, fortifyFromId, territory.territoryId);
+    return canFortifyAdjacent(state.territories, playerId, fortifyFromId, territory.territoryId);
   });
-  const reinforceMax = Math.max(1, state?.reinforcementsAvailable ?? 1);
   const possibleAttackTargetIds = useMemo(() => {
     if (!state || currentPhase !== "attack" || !isMyTurn) {
       return new Set<string>();
@@ -492,6 +903,50 @@ function App() {
     }
     return result;
   }, [attackFromId, attackSourceOptions, currentPhase, isMyTurn, playerId, state]);
+  const overlayById = useMemo(() => {
+    const map = new Map<string, TerritoryOverlay>();
+    for (const overlay of regionOverlays) {
+      map.set(overlay.id, overlay);
+    }
+    return map;
+  }, [regionOverlays]);
+  const attackPreviewLines = useMemo(() => {
+    if (!state || !isMyTurn || currentPhase !== "attack") {
+      return [] as Array<{ key: string; fromX: number; fromY: number; toX: number; toY: number; selected: boolean }>;
+    }
+    if (!attackFromId) {
+      return [] as Array<{ key: string; fromX: number; fromY: number; toX: number; toY: number; selected: boolean }>;
+    }
+    const sourceState = state.territories[attackFromId];
+    if (!sourceState) {
+      return [] as Array<{ key: string; fromX: number; fromY: number; toX: number; toY: number; selected: boolean }>;
+    }
+    const lines: Array<{ key: string; fromX: number; fromY: number; toX: number; toY: number; selected: boolean }> = [];
+    const pushLine = (fromId: string, toId: string, selected: boolean) => {
+      const from = overlayById.get(fromId);
+      const to = overlayById.get(toId);
+      if (!from || !to) {
+        return;
+      }
+      lines.push({
+        key: `${fromId}->${toId}`,
+        fromX: from.centerX,
+        fromY: from.centerY,
+        toX: to.centerX,
+        toY: to.centerY,
+        selected
+      });
+    };
+
+    for (const neighborId of sourceState.neighborTerritoryIds) {
+      const target = state.territories[neighborId];
+      if (target && target.ownerPlayerId !== playerId) {
+        const selected = !attackToId || neighborId === attackToId;
+        pushLine(attackFromId, neighborId, selected);
+      }
+    }
+    return lines;
+  }, [attackFromId, attackToId, currentPhase, isMyTurn, overlayById, playerId, state]);
   const playerColorById = useMemo(() => {
     if (!state) {
       return {} as Record<string, string>;
@@ -503,6 +958,25 @@ function App() {
     return map;
   }, [state]);
   const hoveredTerritoryLabel = hoverTerritoryId ? labelForTerritory(hoverTerritoryId) : "-";
+  const canPlaceFromMap = isMyTurn && (currentPhase === "setup" || currentPhase === "reinforcement");
+  const placeReinforcementFromMap = useCallback(
+    (territoryId: string, delta: number) => {
+      if (!canPlaceFromMap || !state) {
+        return;
+      }
+      if (delta < 0) {
+        setStatus("I rinforzi già piazzati non possono essere rimossi.");
+        return;
+      }
+      const territory = state.territories[territoryId];
+      if (!territory || territory.ownerPlayerId !== playerId || state.reinforcementsAvailable <= 0) {
+        return;
+      }
+      setReinforceTerritoryId(territoryId);
+      submitCommand("PlaceReinforcements", { territoryId, armiesToPlace: 1 });
+    },
+    [canPlaceFromMap, playerId, state, submitCommand]
+  );
 
   const handleTerritoryClick = useCallback(
     (territoryId: string) => {
@@ -523,7 +997,17 @@ function App() {
       }
 
       if (currentPhase === "attack") {
+        if (hasPendingCaptureMove) {
+          setStatus("Devi prima scegliere quante armate spostare nel territorio conquistato.");
+          return;
+        }
         if (territory.ownerPlayerId === playerId && territory.armies > 1) {
+          if (attackFromId === territoryId) {
+            setAttackFromId("");
+            setAttackToId("");
+            setStatus("Sorgente attacco deselezionata.");
+            return;
+          }
           setAttackFromId(territoryId);
           setAttackToId("");
           setStatus(`Attacco da: ${labelForTerritory(territoryId)}. Seleziona il bersaglio.`);
@@ -550,14 +1034,14 @@ function App() {
           setStatus(`Fortifica da: ${labelForTerritory(territoryId)}.`);
           return;
         }
-        const canReach = canReachOwnedTarget(state.territories, playerId, fortifyFromId, territoryId);
+        const canReach = canFortifyAdjacent(state.territories, playerId, fortifyFromId, territoryId);
         if (canReach) {
           setFortifyToId(territoryId);
           setStatus(`Fortifica verso: ${labelForTerritory(territoryId)}.`);
         }
       }
     },
-    [attackFromId, currentPhase, fortifyFromId, isMyTurn, playerId, state]
+    [attackFromId, currentPhase, fortifyFromId, hasPendingCaptureMove, isMyTurn, playerId, state]
   );
 
   const clearMapSelections = useCallback(() => {
@@ -687,12 +1171,82 @@ function App() {
   }, [hostUrl, matchId, roomId, syncOn]);
 
   useEffect(() => {
+    if (!roomId || !peerId || screen !== "game") {
+      return;
+    }
+    let cancelled = false;
+    const pollChat = async () => {
+      try {
+        const events = await getJson<HostEventMessage[]>(
+          `${hostUrl}/api/rooms/${encodeURIComponent(roomId)}/peers/${encodeURIComponent(peerId)}/events?after=${chatLastSequenceRef.current}`
+        );
+        if (cancelled || events.length === 0) {
+          return;
+        }
+
+        let maxSequence = chatLastSequenceRef.current;
+        const incoming: { id: number; author: string; text: string; at: string }[] = [];
+        for (const evt of events) {
+          maxSequence = Math.max(maxSequence, evt.sequence);
+          if (evt.type !== "chat_message") {
+            continue;
+          }
+          let payload: ChatEventPayload | null = null;
+          try {
+            payload = JSON.parse(evt.payload) as ChatEventPayload;
+          } catch {
+            payload = null;
+          }
+          if (!payload || !payload.text?.trim()) {
+            continue;
+          }
+          incoming.push({
+            id: evt.sequence,
+            author: payload.authorDisplayName || payload.authorPeerId || evt.hostPeerId,
+            text: payload.text,
+            at: new Date(payload.sentAtUtc || evt.createdAtUtc).toLocaleTimeString()
+          });
+        }
+
+        if (incoming.length > 0) {
+          setChatMessages(current => {
+            const known = new Set(current.map(message => message.id));
+            const merged = [...current];
+            for (const message of incoming) {
+              if (!known.has(message.id)) {
+                merged.push(message);
+                known.add(message.id);
+              }
+            }
+            return merged.slice(-120);
+          });
+        }
+        chatLastSequenceRef.current = maxSequence;
+      } catch {
+        // chat poll is best-effort; avoid noisy status overrides.
+      }
+    };
+
+    pollChat();
+    const timer = window.setInterval(pollChat, 900);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [hostUrl, peerId, roomId, screen]);
+
+  useEffect(() => {
+    setChatMessages([]);
+    chatLastSequenceRef.current = 0;
+  }, [roomId]);
+
+  useEffect(() => {
     if (!ownedTerritories.length) {
       setReinforceTerritoryId("");
       return;
     }
-    if (!ownedTerritories.some(territory => territory.territoryId === reinforceTerritoryId)) {
-      setReinforceTerritoryId(ownedTerritories[0].territoryId);
+    if (reinforceTerritoryId && !ownedTerritories.some(territory => territory.territoryId === reinforceTerritoryId)) {
+      setReinforceTerritoryId("");
     }
   }, [ownedTerritories, reinforceTerritoryId]);
 
@@ -702,20 +1256,55 @@ function App() {
       setAttackToId("");
       return;
     }
-    if (!attackSourceOptions.some(territory => territory.territoryId === attackFromId)) {
-      setAttackFromId(attackSourceOptions[0].territoryId);
+    if (attackFromId && !attackSourceOptions.some(territory => territory.territoryId === attackFromId)) {
+      setAttackFromId("");
     }
   }, [attackFromId, attackSourceOptions]);
 
   useEffect(() => {
-    if (!attackTargetOptions.length) {
+    if (!attackFromId || !attackTargetOptions.length) {
       setAttackToId("");
       return;
     }
-    if (!attackTargetOptions.some(territory => territory.territoryId === attackToId)) {
-      setAttackToId(attackTargetOptions[0].territoryId);
+    if (attackToId && !attackTargetOptions.some(territory => territory.territoryId === attackToId)) {
+      setAttackToId("");
     }
-  }, [attackTargetOptions, attackToId]);
+  }, [attackFromId, attackTargetOptions, attackToId]);
+
+  useEffect(() => {
+    if (attackDice > attackDiceMax) {
+      setAttackDice(attackDiceMax);
+    }
+  }, [attackDice, attackDiceMax]);
+
+  useEffect(() => {
+    if (currentPhase !== "reinforcement") {
+      setSelectedTradeCardIds([]);
+      return;
+    }
+    setSelectedTradeCardIds(current => current.filter(cardId => myCards.includes(cardId)));
+  }, [currentPhase, myCards]);
+
+  useEffect(() => {
+    if (!hasPendingCaptureMove) {
+      setCaptureMoveReady(false);
+      return;
+    }
+    setCaptureMoveArmies(current => clamp(current, pendingCaptureMinArmies, pendingCaptureMaxArmies));
+  }, [hasPendingCaptureMove, pendingCaptureMaxArmies, pendingCaptureMinArmies]);
+
+  useEffect(() => {
+    if (!hasPendingCaptureMove) {
+      setCaptureMoveReady(false);
+      return;
+    }
+    if (combatPopup?.visible) {
+      setCaptureMoveReady(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setCaptureMoveReady(true), 650);
+    return () => window.clearTimeout(timer);
+  }, [combatPopup?.visible, hasPendingCaptureMove]);
 
   useEffect(() => {
     if (!fortifySourceOptions.length) {
@@ -739,16 +1328,15 @@ function App() {
   }, [fortifyTargetOptions, fortifyToId]);
 
   useEffect(() => {
-    if (reinforceArmies > reinforceMax) {
-      setReinforceArmies(reinforceMax);
-    }
-  }, [reinforceArmies, reinforceMax]);
-
-  useEffect(() => {
     return () => {
       dealTimerIdsRef.current.forEach(timer => clearTimeout(timer));
+      clearCombatTimers();
+      if (panRafRef.current !== null) {
+        window.cancelAnimationFrame(panRafRef.current);
+        panRafRef.current = null;
+      }
     };
-  }, []);
+  }, [clearCombatTimers]);
 
   useEffect(() => {
     if (screen !== "game" || !state || !matchId || !playerId) {
@@ -765,25 +1353,29 @@ function App() {
     setDealFlyToHand(false);
     setSetupDeckVisible(true);
     setRevealedTerritories([]);
+    setTerritoryFlipCount(0);
 
     const shuffled = [...ownedTerritoryIds].sort(() => Math.random() - 0.5);
     setDealtTerritoryOrder(shuffled);
     const objectiveRevealMs = 5000;
-    const territoryDealStepMs = 320;
-    const territoryDealStartMs = objectiveRevealMs + 200;
-    const territoryDealDurationMs = shuffled.length * territoryDealStepMs;
-    const completeStageMs = territoryDealStartMs + territoryDealDurationMs + 900;
+    const territoryDealStartMs = objectiveRevealMs + 140;
+    const territoryFlipStepMs = 220;
+    const territoryFlipStartMs = territoryDealStartMs + 120;
+    const territoryFlipDurationMs = shuffled.length * territoryFlipStepMs;
+    const completeStageMs = territoryFlipStartMs + territoryFlipDurationMs + 460;
     const closeOverlayMs = completeStageMs + 1600;
     dealTimerIdsRef.current.forEach(timer => clearTimeout(timer));
     const timers: number[] = [];
-    timers.push(window.setTimeout(() => setDealStage("territories"), objectiveRevealMs));
+    timers.push(
+      window.setTimeout(() => {
+        setDealStage("territories");
+        setRevealedTerritories(shuffled);
+        setTerritoryFlipCount(0);
+      }, territoryDealStartMs)
+    );
 
     for (let i = 0; i < shuffled.length; i++) {
-      timers.push(
-        window.setTimeout(() => {
-          setRevealedTerritories(current => (current.includes(shuffled[i]) ? current : [...current, shuffled[i]]));
-        }, territoryDealStartMs + i * territoryDealStepMs)
-      );
+      timers.push(window.setTimeout(() => setTerritoryFlipCount(i + 1), territoryFlipStartMs + i * territoryFlipStepMs));
     }
 
     timers.push(
@@ -798,6 +1390,7 @@ function App() {
       window.setTimeout(() => {
         setDealStage("idle");
         setDealFlyToHand(false);
+        setTerritoryFlipCount(0);
       }, closeOverlayMs)
     );
     dealTimerIdsRef.current = timers;
@@ -811,6 +1404,47 @@ function App() {
     setSetupDeckVisible(false);
     setStatus("Setup completato. Carte territorio rimescolate, partita attiva.");
   }, [dealStage, setupComplete, setupDeckVisible]);
+
+  useEffect(() => {
+    if (!dealFlyToHand) {
+      setDealFlyVectors({});
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      const handRect = handCardsRef.current?.getBoundingClientRect();
+      if (!handRect) {
+        return;
+      }
+
+      const targetX = handRect.left + handRect.width * 0.5;
+      const targetY = handRect.top + Math.max(36, Math.min(96, handRect.height * 0.42));
+      const count = Math.max(1, revealedTerritories.length);
+      const spread = Math.min(260, count * 9);
+      const vectors: Record<string, { x: number; y: number; rot: number }> = {};
+
+      for (let index = 0; index < revealedTerritories.length; index++) {
+        const id = revealedTerritories[index];
+        const cardEl = dealCardRefs.current[id];
+        if (!cardEl) {
+          continue;
+        }
+        const rect = cardEl.getBoundingClientRect();
+        const cx = rect.left + rect.width * 0.5;
+        const cy = rect.top + rect.height * 0.5;
+        const slot = count === 1 ? 0 : index / (count - 1) - 0.5;
+        const xFan = slot * spread;
+        const x = targetX + xFan - cx;
+        const y = targetY - cy;
+        const rot = slot * 26;
+        vectors[id] = { x, y, rot };
+      }
+
+      setDealFlyVectors(vectors);
+    });
+
+    return () => window.cancelAnimationFrame(rafId);
+  }, [dealFlyToHand, revealedTerritories]);
 
   useEffect(() => {
     if (screen !== "game") {
@@ -827,6 +1461,7 @@ function App() {
       centerX: number;
       centerY: number;
       text: string;
+      textLines: string[];
       chipRadius: number;
       labelFontSize: number;
       labelWidth: number;
@@ -883,18 +1518,24 @@ function App() {
         const boundsHeight = Math.max(...corners.map(corner => corner.y)) - Math.min(...corners.map(corner => corner.y));
         const territorySpan = Math.max(8, Math.min(boundsWidth, boundsHeight));
         const text = labelForTerritory(territory.id);
-        const chipRadius = clamp(territorySpan * 0.18, 7, 16);
-        const baseFontSize = clamp(territorySpan * 0.17, 8.6, 16);
-        const lengthCap = clamp(180 / Math.max(7, text.length), 8.2, 16);
-        const labelFontSize = Math.min(baseFontSize, lengthCap);
-        const labelWidth = Math.max(38, text.length * labelFontSize * 0.54);
-        const labelHeight = Math.max(11, labelFontSize * 1.16);
+        const textLines = splitTerritoryLabel(text);
+        const longestLineLength = Math.max(...textLines.map(line => line.length));
+        const tuning = TERRITORY_OVERLAY_TUNING[territory.id] ?? {};
+        const chipRadius = clamp(territorySpan * 0.14, 5.5, 10.5);
+        const widthLimited = (boundsWidth * 0.7) / Math.max(4, longestLineLength * 0.6);
+        const lineCount = textLines.length;
+        const heightLimited = (boundsHeight * 0.27) / Math.max(1, lineCount);
+        const tunedBase = Math.min(widthLimited, heightLimited) * (tuning.fontScale ?? 1);
+        const labelFontSize = clamp(tunedBase, 4.4, 7);
+        const labelWidth = Math.max(34, longestLineLength * labelFontSize * 0.56);
+        const labelHeight = Math.max(10, labelFontSize * 1.14 * lineCount);
 
         points.push({
           id: territory.id,
           centerX: transformedCenter.x,
           centerY: transformedCenter.y,
           text,
+          textLines,
           chipRadius,
           labelFontSize,
           labelWidth,
@@ -919,103 +1560,23 @@ function App() {
       }
     }
 
-    const placedBoxes: { left: number; top: number; right: number; bottom: number }[] = points.map(point => ({
-      left: point.centerX - point.chipRadius - 2,
-      top: point.centerY - point.chipRadius - 2,
-      right: point.centerX + point.chipRadius + 2,
-      bottom: point.centerY + point.chipRadius + 2
-    }));
-    const sortedPoints = [...points].sort((a, b) => b.chipRadius - a.chipRadius);
-    const safeMinX = minX + 8;
-    const safeMinY = minY + 8;
-    const safeMaxX = maxX - 8;
-    const safeMaxY = maxY - 8;
-    for (const point of sortedPoints) {
-      let selected = {
-        x: point.centerX,
-        y: point.centerY + point.chipRadius + point.labelHeight * 0.95
-      };
-      let placed = false;
-
-      const baseDistance = point.chipRadius + point.labelHeight * 0.92;
-      for (let ring = 0; ring < 14 && !placed; ring++) {
-        const distance = baseDistance + ring * Math.max(5.5, point.labelHeight * 0.68);
-        for (let angleDeg = 0; angleDeg < 360; angleDeg += 22.5) {
-          const angleRad = (angleDeg * Math.PI) / 180;
-          const x = point.centerX + Math.cos(angleRad) * distance;
-          const y = point.centerY + Math.sin(angleRad) * distance;
-          const box = {
-            left: x - point.labelWidth / 2 - 4,
-            top: y - point.labelHeight / 2 - 3,
-            right: x + point.labelWidth / 2 + 4,
-            bottom: y + point.labelHeight / 2 + 3
-          };
-          if (box.left < safeMinX || box.right > safeMaxX || box.top < safeMinY || box.bottom > safeMaxY) {
-            continue;
-          }
-
-          const overlaps = placedBoxes.some(existing =>
-            !(box.right < existing.left || box.left > existing.right || box.bottom < existing.top || box.top > existing.bottom));
-
-          if (!overlaps) {
-            selected = { x, y };
-            placedBoxes.push(box);
-            placed = true;
-            break;
-          }
-        }
-      }
-
-      if (!placed) {
-        const maxSearch = 280;
-        const step = Math.max(5, Math.round(point.labelHeight * 0.55));
-        for (let dy = 0; dy <= maxSearch && !placed; dy += step) {
-          for (let dx = 0; dx <= maxSearch && !placed; dx += step) {
-            const variants = [
-              { x: point.centerX + dx, y: point.centerY + dy },
-              { x: point.centerX - dx, y: point.centerY + dy },
-              { x: point.centerX + dx, y: point.centerY - dy },
-              { x: point.centerX - dx, y: point.centerY - dy }
-            ];
-            for (const variant of variants) {
-              const box = {
-                left: variant.x - point.labelWidth / 2 - 4,
-                top: variant.y - point.labelHeight / 2 - 3,
-                right: variant.x + point.labelWidth / 2 + 4,
-                bottom: variant.y + point.labelHeight / 2 + 3
-              };
-              if (box.left < safeMinX || box.right > safeMaxX || box.top < safeMinY || box.bottom > safeMaxY) {
-                continue;
-              }
-              if (placedBoxes.some(existing => boxesOverlap(box, existing))) {
-                continue;
-              }
-              selected = variant;
-              placedBoxes.push(box);
-              placed = true;
-              break;
-            }
-          }
-        }
-      }
-
-      if (!placed) {
-        const fallbackBox = {
-          left: selected.x - point.labelWidth / 2 - 4,
-          top: selected.y - point.labelHeight / 2 - 3,
-          right: selected.x + point.labelWidth / 2 + 4,
-          bottom: selected.y + point.labelHeight / 2 + 3
-        };
-        placedBoxes.push(fallbackBox);
-      }
+    for (const point of points) {
+      const tuning = TERRITORY_OVERLAY_TUNING[point.id] ?? {};
+      const labelOffset = Math.max(point.chipRadius * 2.05, point.labelHeight * 1.08 + 7);
+      const labelX = point.centerX + (tuning.labelDx ?? 0);
+      const labelY = point.centerY - labelOffset + (tuning.labelDy ?? 0);
+      const chipY = point.centerY + Math.max(point.chipRadius * 1.45, point.labelHeight * 0.56 + 6) + (tuning.chipDy ?? 0);
+      const centerX = point.centerX + (tuning.chipDx ?? 0);
 
       nextOverlays.push({
         id: point.id,
-        centerX: point.centerX,
+        centerX,
         centerY: point.centerY,
+        textLines: point.textLines,
+        chipY,
         chipRadius: point.chipRadius,
-        labelX: selected.x,
-        labelY: selected.y,
+        labelX,
+        labelY,
         labelFontSize: point.labelFontSize,
         labelWidth: point.labelWidth,
         labelHeight: point.labelHeight,
@@ -1137,7 +1698,9 @@ function App() {
       }
 
       const fitScale = Math.max(viewportRect.width / baseWidth, viewportRect.height / baseHeight);
-      const nextMin = clamp(fitScale, 0.6, 2.2);
+      // Keep map readable but allow a bit more zoom-out than full-fit.
+      const strictMinScale = fitScale * 0.88;
+      const nextMin = clamp(strictMinScale, 0.5, 2.2);
       setMapMinScale(previous => (Math.abs(previous - nextMin) < 0.005 ? previous : nextMin));
       setMapScale(previous => (previous < nextMin ? nextMin : previous));
     };
@@ -1145,12 +1708,10 @@ function App() {
     const rafId = window.requestAnimationFrame(computeMinScale);
     const resizeHandler = () => computeMinScale();
     window.addEventListener("resize", resizeHandler);
-    const intervalId = window.setInterval(computeMinScale, 400);
 
     return () => {
       window.cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resizeHandler);
-      window.clearInterval(intervalId);
     };
   }, [mapScale, screen]);
 
@@ -1232,7 +1793,7 @@ function App() {
     }
   };
 
-  const submitCommand = async (type: string, payload: Record<string, unknown>) => {
+  async function submitCommand(type: string, payload: Record<string, unknown>) {
     if (!matchId || !playerId || !peerId) {
       setStatus("ID partita, ID peer e ID giocatore sono obbligatori.");
       return;
@@ -1263,25 +1824,110 @@ function App() {
         return;
       }
       setStatus(`Comando accettato (${commandLabel(type)}): ${body.appliedEventCount} eventi.`);
+      if (type.toLowerCase() === "attack" && body.attackResolution) {
+        showCombatResolutionPopup(body.attackResolution);
+      }
     } catch (error) {
       setStatus(`Errore comando: ${(error as Error).message}`);
     }
-  };
+  }
 
-  const sendChatMessage = () => {
+  const sendChatMessage = async () => {
     const text = chatInput.trim();
     if (!text) {
       return;
     }
-    setChatMessages(current => [
-      ...current,
-      { id: Date.now(), author: playerId || peerId || "giocatore", text, at: new Date().toLocaleTimeString() }
-    ]);
-    setChatInput("");
+    if (!roomId || !peerId) {
+      setStatus("Chat non disponibile: roomId/peerId mancanti.");
+      return;
+    }
+    try {
+      const displayName = state?.players.find(player => player.playerId === playerId)?.displayName
+        || roomSnapshot?.participants.find(participant => participant.peerId === peerId)?.displayName
+        || playerId
+        || peerId;
+
+      await postJson<HostEventMessage>(
+        `${hostUrl}/api/rooms/${encodeURIComponent(roomId)}/host/${encodeURIComponent(peerId)}/events`,
+        {
+          type: "chat_message",
+          payload: JSON.stringify({
+            authorPeerId: peerId,
+            authorDisplayName: displayName,
+            text,
+            sentAtUtc: new Date().toISOString()
+          } satisfies ChatEventPayload)
+        }
+      );
+      setChatInput("");
+    } catch (error) {
+      setStatus(`Invio chat fallito: ${(error as Error).message}`);
+    }
   };
 
-  const zoomBy = (delta: number) => {
-    setMapScale(current => clamp(current + delta, mapMinScale, 3));
+  const zoomBy = (delta: number, clientX?: number, clientY?: number) => {
+    const viewport = mapViewportRef.current;
+    if (!viewport) {
+      setMapScale(current => {
+        const next = clamp(current + delta, mapMinScale, 4);
+        return Math.round(next * 100) / 100;
+      });
+      return;
+    }
+
+    const rect = viewport.getBoundingClientRect();
+    const pointerX = clientX ?? rect.left + rect.width / 2;
+    const pointerY = clientY ?? rect.top + rect.height / 2;
+    const pointInViewportX = pointerX - rect.left;
+    const pointInViewportY = pointerY - rect.top;
+    const viewportCenterX = rect.width / 2;
+    const viewportCenterY = rect.height / 2;
+
+    setMapScale(currentScale => {
+      const nextScale = Math.round(clamp(currentScale + delta, mapMinScale, 4) * 100) / 100;
+      if (nextScale === currentScale) {
+        return currentScale;
+      }
+
+      const baseMapWidth = mapRef.current?.clientWidth ?? Math.min(rect.width * 0.92, 1480);
+      const mapWorldWidth = baseMapWidth * Math.max(0.1, nextScale);
+
+      setMapOffset(currentOffset => {
+        const localX = (pointInViewportX - viewportCenterX - currentOffset.x) / currentScale;
+        const localY = (pointInViewportY - viewportCenterY - currentOffset.y) / currentScale;
+        const nextX = pointInViewportX - viewportCenterX - localX * nextScale;
+        const nextY = pointInViewportY - viewportCenterY - localY * nextScale;
+        return {
+          x: normalizeLoopedOffsetX(nextX, mapWorldWidth),
+          y: Math.round(nextY)
+        };
+      });
+
+      return nextScale;
+    });
+  };
+
+  useEffect(() => {
+    const baseMapWidth = mapRef.current?.clientWidth
+      ?? Math.min((mapViewportRef.current?.clientWidth ?? window.innerWidth) * 0.92, 1480);
+    const mapWorldWidth = baseMapWidth * Math.max(0.1, mapScale);
+    setMapOffset(current => ({
+      x: normalizeLoopedOffsetX(current.x, mapWorldWidth),
+      y: current.y
+    }));
+  }, [mapScale]);
+
+  const toggleTradeCard = (cardId: string) => {
+    setSelectedTradeCardIds(current => {
+      if (current.includes(cardId)) {
+        return current.filter(id => id !== cardId);
+      }
+      if (current.length >= 3) {
+        setStatus("Puoi selezionare massimo 3 carte per il tris.");
+        return current;
+      }
+      return [...current, cardId];
+    });
   };
 
   const renderObjectiveCard = (compact = false) => (
@@ -1472,7 +2118,7 @@ function App() {
           className="arena-map-viewport"
           onWheel={event => {
             event.preventDefault();
-            zoomBy(event.deltaY > 0 ? -0.08 : 0.08);
+            zoomBy(event.deltaY > 0 ? -0.08 : 0.08, event.clientX, event.clientY);
           }}
           onMouseDown={event => {
             setIsPanning(true);
@@ -1482,10 +2128,32 @@ function App() {
             if (!isPanning) {
               return;
             }
-            setMapOffset({ x: event.clientX - panStart.x, y: event.clientY - panStart.y });
+            schedulePanOffset(event.clientX - panStart.x, event.clientY - panStart.y);
           }}
-          onMouseUp={() => setIsPanning(false)}
-          onMouseLeave={() => setIsPanning(false)}
+          onMouseUp={() => {
+            setIsPanning(false);
+            if (pendingPanOffsetRef.current) {
+              const next = pendingPanOffsetRef.current;
+              pendingPanOffsetRef.current = null;
+              setMapOffset(next);
+            }
+            if (panRafRef.current !== null) {
+              window.cancelAnimationFrame(panRafRef.current);
+              panRafRef.current = null;
+            }
+          }}
+          onMouseLeave={() => {
+            setIsPanning(false);
+            if (pendingPanOffsetRef.current) {
+              const next = pendingPanOffsetRef.current;
+              pendingPanOffsetRef.current = null;
+              setMapOffset(next);
+            }
+            if (panRafRef.current !== null) {
+              window.cancelAnimationFrame(panRafRef.current);
+              panRafRef.current = null;
+            }
+          }}
           onClick={event => {
             const target = event.target as Element | null;
             if (target?.closest("[data-territory-id]")) {
@@ -1494,19 +2162,58 @@ function App() {
             clearMapSelections();
           }}
         >
-          <div className="arena-map-stage" style={{ transform: `translate(calc(-50% + ${mapOffset.x}px), calc(-50% + ${mapOffset.y}px)) scale(${mapScale})` }}>
+          <div
+            className="arena-map-stage"
+            style={{ transform: `translate(calc(-50% + ${mapOffset.x}px), calc(-50% + ${mapOffset.y}px)) scale(${mapScale})` }}
+          >
             <div ref={mapRef} className="map-canvas arena-map" dangerouslySetInnerHTML={{ __html: worldClassic.svg }} />
+            <svg className="map-attack-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
+              {attackPreviewLines.map(line => (
+                <line
+                  key={line.key}
+                  className={`attack-link ${line.selected ? "selected" : ""}`}
+                  x1={line.fromX}
+                  y1={line.fromY}
+                  x2={line.toX}
+                  y2={line.toY}
+                />
+              ))}
+            </svg>
+            <svg className="map-selection-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
+              {currentPhase === "attack" && attackFromId && overlayById.has(attackFromId) ? (
+                <g
+                  className="selected-source-marker"
+                  transform={`translate(${overlayById.get(attackFromId)!.centerX} ${overlayById.get(attackFromId)!.centerY})`}
+                >
+                  <circle r={Math.max(18, overlayById.get(attackFromId)!.chipRadius + 7)} />
+                  <circle r={Math.max(24, overlayById.get(attackFromId)!.chipRadius + 13)} />
+                </g>
+              ) : null}
+            </svg>
             <svg className="map-owner-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
-              {regionOverlays.map(overlay => {
+          {regionOverlays.map(overlay => {
                 const territory = state?.territories?.[overlay.id];
                 if (!territory) {
                   return null;
                 }
                 const ownerColor = playerColorById[territory.ownerPlayerId] ?? "#7f92a5";
+                const ownerIndex = state?.players.findIndex(player => player.playerId === territory.ownerPlayerId) ?? -1;
+                const tankAsset = ownerIndex >= 0 ? PLAYER_TANK_ASSETS[ownerIndex % PLAYER_TANK_ASSETS.length] : null;
                 return (
-                  <g key={`owner-${overlay.id}`} className="map-owner-chip" transform={`translate(${overlay.centerX} ${overlay.centerY})`}>
-                    <circle cx="0" cy="0" r={overlay.chipRadius} fill={ownerColor} />
-                    <text x="0" y="0" style={{ fontSize: `${Math.max(8, overlay.chipRadius * 1.05)}px` }}>
+                  <g key={`owner-${overlay.id}-${territory.armies}-${territory.ownerPlayerId}`} className="map-owner-chip" transform={`translate(${overlay.centerX} ${overlay.chipY})`}>
+                    {tankAsset ? (
+                      <image
+                        href={tankAsset}
+                        x={-overlay.chipRadius * 0.9}
+                        y={-overlay.chipRadius * 0.62}
+                        width={overlay.chipRadius * 1.35}
+                        height={overlay.chipRadius * 1.35}
+                        preserveAspectRatio="xMidYMid meet"
+                      />
+                    ) : (
+                      <circle cx="0" cy="0" r={overlay.chipRadius} fill={ownerColor} />
+                    )}
+                    <text x={overlay.chipRadius * 1.02} y={0} style={{ fontSize: `${Math.max(8, overlay.chipRadius * 0.9)}px` }}>
                       {territory.armies}
                     </text>
                   </g>
@@ -1516,10 +2223,56 @@ function App() {
             <svg className="map-label-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
               {regionOverlays.map(overlay => (
                 <text key={overlay.id} x={overlay.labelX} y={overlay.labelY} style={{ fontSize: `${overlay.labelFontSize}px` }}>
-                  {overlay.text}
+                  {overlay.textLines.map((line, index) => {
+                    const lineOffset = (index - (overlay.textLines.length - 1) / 2) * overlay.labelFontSize * 1.12;
+                    return (
+                      <tspan key={`${overlay.id}-line-${index}`} x={overlay.labelX} dy={index === 0 ? lineOffset : overlay.labelFontSize * 1.12}>
+                        {line}
+                      </tspan>
+                    );
+                  })}
                 </text>
               ))}
             </svg>
+            {canPlaceFromMap ? (
+              <svg className="map-reinforce-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
+                {regionOverlays.map(overlay => {
+                  const territory = state?.territories?.[overlay.id];
+                  if (!territory || territory.ownerPlayerId !== playerId) {
+                    return null;
+                  }
+                  const controlOffsetX = Math.max(8.5, overlay.chipRadius + 5.5);
+                  const controlY = overlay.chipY;
+                  const buttonRadius = Math.max(3.5, overlay.chipRadius * 0.32);
+                  const canAdd = canPlaceFromMap && (state?.reinforcementsAvailable ?? 0) > 0;
+                  return (
+                    <g key={`reinforce-${overlay.id}`} className="reinforce-controls">
+                      <g
+                        className="reinforce-svg-btn minus is-disabled"
+                        transform={`translate(${overlay.centerX - controlOffsetX} ${controlY})`}
+                      >
+                        <circle r={buttonRadius} />
+                        <text y={buttonRadius * 0.08}>-</text>
+                      </g>
+                      <g
+                        className={`reinforce-svg-btn plus ${canAdd ? "" : "is-disabled"}`.trim()}
+                        transform={`translate(${overlay.centerX + controlOffsetX} ${controlY})`}
+                        onClick={event => {
+                          event.stopPropagation();
+                          if (!canAdd) {
+                            return;
+                          }
+                          placeReinforcementFromMap(overlay.id, 1);
+                        }}
+                      >
+                        <circle r={buttonRadius} />
+                        <text y={buttonRadius * 0.08}>+</text>
+                      </g>
+                    </g>
+                  );
+                })}
+              </svg>
+            ) : null}
           </div>
           <div className="map-zoom-tools">
             <button type="button" className="btn-secondary" onClick={() => zoomBy(0.12)}>
@@ -1557,7 +2310,7 @@ function App() {
                   draggable={false}
                 />
                 <span className="player-card-chip" style={{ backgroundColor: row.color }}>
-                  {row.player.displayName.slice(0, 1).toUpperCase()}
+                  <img src={row.tankAsset} alt="" className="player-card-chip-icon" draggable={false} />
                 </span>
               </div>
               <div className="player-hover-card">
@@ -1572,76 +2325,89 @@ function App() {
         </ul>
       </aside>
 
-      <aside className="arena-right">
-        <section className="arena-panel-card">
-          <h3>Stato Partita</h3>
-          <p className="muted small-gap">Territorio sotto cursore: <strong>{hoveredTerritoryLabel}</strong></p>
-          <p className="muted small-gap">Tuo turno: <strong>{isMyTurn ? "Si" : "No"}</strong></p>
-          <p className="muted small-gap">Fase: <strong>{phaseLabel(currentPhase)}</strong></p>
-        </section>
+      <aside className="arena-chat-dock">
+        <div className="chat-log">
+          {chatMessages.length === 0 ? <p className="muted">Nessun messaggio.</p> : null}
+          {chatMessages.map(message => (
+            <p key={message.id}>
+              <strong>{message.author}</strong> [{message.at}]<br />
+              {message.text}
+            </p>
+          ))}
+        </div>
+        <div className="chat-send">
+          <input value={chatInput} onChange={event => setChatInput(event.target.value)} placeholder="Scrivi un messaggio..." />
+          <button type="button" className="btn-secondary" onClick={sendChatMessage}>
+            Invia
+          </button>
+        </div>
+      </aside>
 
-        <section className="arena-panel-card">
-          <h3>Chat</h3>
-          <div className="chat-log">
-            {chatMessages.length === 0 ? <p className="muted">Nessun messaggio.</p> : null}
-            {chatMessages.map(message => (
-              <p key={message.id}>
-                <strong>{message.author}</strong> [{message.at}]<br />
-                {message.text}
-              </p>
-            ))}
-          </div>
-          <div className="chat-send">
-            <input value={chatInput} onChange={event => setChatInput(event.target.value)} placeholder="Scrivi un messaggio..." />
-            <button type="button" className="btn-secondary" onClick={sendChatMessage}>
-              Invia
-            </button>
-          </div>
-        </section>
+      <section className="arena-command-hud">
+        <div className="arena-command-top compact">
+          <span>Fase: <strong>{phaseLabel(currentPhase)}</strong></span>
+          {currentPhase === "reinforcement" || currentPhase === "setup" ? (
+            <span>Rinforzi: <strong>{state?.reinforcementsAvailable ?? 0}</strong></span>
+          ) : null}
+          {hoverTerritoryId ? (
+            <span>Territorio: <strong>{hoveredTerritoryLabel}</strong></span>
+          ) : null}
+        </div>
 
-        <section className="action-stack compact arena-panel-card">
-          <h3>Azioni</h3>
-          <p className="phase-help">{phaseInstruction}</p>
-          <label className="field">
-            Rinforza
-            <select value={reinforceTerritoryId} onChange={event => setReinforceTerritoryId(event.target.value)}>
-              {ownedTerritories.map(territory => (
-                <option key={territory.territoryId} value={territory.territoryId}>
-                  {labelForTerritory(territory.territoryId)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="button-row reinforce-stepper">
+        {currentPhase === "reinforcement" ? (
+          <section className="trade-panel">
+            <h4>Cambia Tris</h4>
+            <p className="muted">Selezione: {selectedTradeCardIds.length}/3</p>
+            <p className="muted">{trisEvaluation.reason}</p>
+            {trisEvaluation.valid ? (
+              <p className="muted"><strong>Bonus: {trisTotalBonus}</strong> ({trisEvaluation.baseBonus} base + {ownedTerritoryTradeBonus} territorio)</p>
+            ) : null}
+            <div className="button-row">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setSelectedTradeCardIds([])}
+                disabled={selectedTradeCardIds.length === 0}
+              >
+                Pulisci
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  submitCommand("PlayCards", { cardIds: selectedTradeCardIds });
+                  setSelectedTradeCardIds([]);
+                }}
+                disabled={!isMyTurn || currentPhase !== "reinforcement" || !trisEvaluation.valid}
+              >
+                Conferma Tris
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {(currentPhase === "setup" || currentPhase === "reinforcement") ? (
+          <div className="arena-command-row">
             <button
               type="button"
-              className="btn-secondary stepper-btn"
-              onClick={() => setReinforceArmies(current => Math.max(1, current - 1))}
-              disabled={!isMyTurn || (currentPhase !== "reinforcement" && currentPhase !== "setup") || reinforceArmies <= 1}
+              className="btn-primary"
+              onClick={() => submitCommand("EndTurn", {})}
+              disabled={
+                !isMyTurn ||
+                currentPhase === "setup" ||
+                hasPendingCaptureMove ||
+                (currentPhase === "reinforcement" && (state?.reinforcementsAvailable ?? 0) > 0)
+              }
             >
-              -
-            </button>
-            <span className="stepper-value">{reinforceArmies}</span>
-            <button
-              type="button"
-              className="btn-secondary stepper-btn"
-              onClick={() => setReinforceArmies(current => Math.min(reinforceMax, current + 1))}
-              disabled={!isMyTurn || (currentPhase !== "reinforcement" && currentPhase !== "setup") || reinforceArmies >= reinforceMax}
-            >
-              +
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => submitCommand("PlaceReinforcements", { territoryId: reinforceTerritoryId, armiesToPlace: reinforceArmies })}
-              disabled={!isMyTurn || (currentPhase !== "reinforcement" && currentPhase !== "setup") || !reinforceTerritoryId}
-            >
-              Piazza
+              Fine / Prossimo
             </button>
           </div>
-          <label className="field">
-            Attacca
+        ) : null}
+
+        {currentPhase === "attack" ? (
+          <div className="arena-command-row">
             <select value={attackFromId} onChange={event => setAttackFromId(event.target.value)}>
+              <option value="">Sorgente attacco</option>
               {attackSourceOptions.map(territory => (
                 <option key={territory.territoryId} value={territory.territoryId}>
                   {labelForTerritory(territory.territoryId)}
@@ -1649,31 +2415,43 @@ function App() {
               ))}
             </select>
             <select value={attackToId} onChange={event => setAttackToId(event.target.value)}>
+              <option value="">{attackFromId ? "Bersaglio attacco" : "Scegli prima la sorgente"}</option>
               {attackTargetOptions.map(territory => (
                 <option key={territory.territoryId} value={territory.territoryId}>
                   {labelForTerritory(territory.territoryId)}
                 </option>
               ))}
             </select>
-          </label>
-          <div className="button-row">
             <select value={attackDice} onChange={event => setAttackDice(Number(event.target.value))}>
-              <option value={1}>1</option>
-              <option value={2}>2</option>
-              <option value={3}>3</option>
+              {attackDiceOptions.map(value => (
+                <option key={value} value={value}>
+                  Dadi: {value}
+                </option>
+              ))}
             </select>
             <button
               type="button"
               className="btn-secondary"
               onClick={() => submitCommand("Attack", { fromTerritoryId: attackFromId, toTerritoryId: attackToId, attackerDice: attackDice })}
-              disabled={!isMyTurn || currentPhase !== "attack" || !attackFromId || !attackToId}
+              disabled={!isMyTurn || currentPhase !== "attack" || hasPendingCaptureMove || !attackFromId || !attackToId}
             >
               Attacca
             </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => submitCommand("EndTurn", {})}
+              disabled={!isMyTurn || hasPendingCaptureMove}
+            >
+              Fine Attacchi
+            </button>
           </div>
-          <label className="field">
-            Fortifica
+        ) : null}
+
+        {currentPhase === "fortify" ? (
+          <div className="arena-command-row">
             <select value={fortifyFromId} onChange={event => setFortifyFromId(event.target.value)}>
+              <option value="">Da territorio</option>
               {fortifySourceOptions.map(territory => (
                 <option key={territory.territoryId} value={territory.territoryId}>
                   {labelForTerritory(territory.territoryId)}
@@ -1681,66 +2459,105 @@ function App() {
               ))}
             </select>
             <select value={fortifyToId} onChange={event => setFortifyToId(event.target.value)}>
+              <option value="">A territorio</option>
               {fortifyTargetOptions.map(territory => (
                 <option key={territory.territoryId} value={territory.territoryId}>
                   {labelForTerritory(territory.territoryId)}
                 </option>
               ))}
             </select>
-          </label>
-          <div className="button-row">
             <input type="number" min={1} value={fortifyArmies} onChange={event => setFortifyArmies(Math.max(1, Number(event.target.value) || 1))} />
             <button
               type="button"
               className="btn-secondary"
               onClick={() => submitCommand("Fortify", { fromTerritoryId: fortifyFromId, toTerritoryId: fortifyToId, armiesToMove: fortifyArmies })}
-              disabled={!isMyTurn || currentPhase !== "fortify" || !fortifyFromId || !fortifyToId}
+              disabled={!isMyTurn || !!state?.fortifyUsedThisTurn || !fortifyFromId || !fortifyToId}
             >
-              Fortifica
+              Conferma Movimento
             </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => submitCommand("EndTurn", {})}
+              disabled={!isMyTurn}
+            >
+              Termina Turno
+            </button>
+            {state?.fortifyUsedThisTurn ? <span className="muted">Movimento di fine turno gia usato.</span> : null}
           </div>
-          <button type="button" className="btn-primary" onClick={() => submitCommand("EndTurn", {})} disabled={!isMyTurn || currentPhase === "setup"}>
-            Fine / Prossimo
-          </button>
-        </section>
-        <p className="arena-status">{status}</p>
-      </aside>
+        ) : null}
+      </section>
+
+      <p className="arena-status-pill">{status}</p>
 
       <footer className="arena-bottom">
         <div className="hand-strip">
           <div className="hand-title">
             <strong>Le tue carte</strong> ({handCount}) | Obiettivo: {myObjective?.title ?? "-"}{" "}
-            {objectiveRemaining !== null ? `| Territori obiettivo mancanti: ${objectiveRemaining}` : ""}
+            {objectiveProgressLabel ? `| ${objectiveProgressLabel}` : ""}
           </div>
-          <div className="hand-cards">
-            {renderObjectiveCard(true)}
-            {setupDeckVisible && dealtTerritoryOrder.length > 0
-              ? dealtTerritoryOrder.map(id => (
-                  <div key={`setup-${id}`} className="hand-card svg-wrap">
+          <div className={`hand-cards ${dealStage === "complete" ? "is-receiving" : ""}`} ref={handCardsRef}>
+            {!hideHandDuringDeal ? renderObjectiveCard(true) : null}
+            {!hideHandDuringDeal && setupDeckVisible && (dealStage === "idle" || dealStage === "complete") && dealtTerritoryOrder.length > 0
+              ? dealtTerritoryOrder.map((id, index) => (
+                  <div
+                    key={`setup-${id}`}
+                    className={`hand-card svg-wrap ${dealStage === "complete" ? "is-incoming" : ""}`.trim()}
+                    style={{ ["--hand-index" as string]: `${index}` } as CSSProperties}
+                  >
                     {renderTerritoryCard(id)}
                   </div>
                 ))
               : null}
-            {!setupDeckVisible && myCards.length === 0 ? <span className="muted">Nessuna carta.</span> : null}
-            {!setupDeckVisible
+            {!hideHandDuringDeal && !setupDeckVisible && myCards.length === 0 ? <span className="muted">Nessuna carta.</span> : null}
+            {!hideHandDuringDeal && !setupDeckVisible
               ? myCards.map(cardId => {
                   if (cardId.startsWith("territory:")) {
                     const territoryId = cardId.replace("territory:", "");
+                    const symbol = state?.cardSymbolById?.[cardId] ?? "";
                     return (
-                      <div key={cardId} className="hand-card svg-wrap">
+                      <div
+                        key={cardId}
+                        className={`hand-card svg-wrap ${currentPhase === "reinforcement" && isMyTurn ? "is-selectable" : ""} ${selectedTradeCardIds.includes(cardId) ? "is-selected" : ""}`.trim()}
+                        onClick={() => {
+                          if (currentPhase === "reinforcement" && isMyTurn) {
+                            toggleTradeCard(cardId);
+                          }
+                        }}
+                        title={symbol ? `${labelForTerritory(territoryId)} • ${cardSymbolLabel(symbol)}` : labelForTerritory(territoryId)}
+                      >
                         {renderTerritoryCard(territoryId)}
                       </div>
                     );
                   }
                   if (cardId.startsWith("joker")) {
                     return (
-                      <div key={cardId} className="hand-card svg-wrap">
+                      <div
+                        key={cardId}
+                        className={`hand-card svg-wrap ${currentPhase === "reinforcement" && isMyTurn ? "is-selectable" : ""} ${selectedTradeCardIds.includes(cardId) ? "is-selected" : ""}`.trim()}
+                        onClick={() => {
+                          if (currentPhase === "reinforcement" && isMyTurn) {
+                            toggleTradeCard(cardId);
+                          }
+                        }}
+                        title="Jolly"
+                      >
                         <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: jokerCardRaw }} />
                       </div>
                     );
                   }
+                  const symbol = state?.cardSymbolById?.[cardId] ?? "";
                   return (
-                    <div key={cardId} className="hand-card">
+                    <div
+                      key={cardId}
+                      className={`hand-card ${currentPhase === "reinforcement" && isMyTurn ? "is-selectable" : ""} ${selectedTradeCardIds.includes(cardId) ? "is-selected" : ""}`.trim()}
+                      onClick={() => {
+                        if (currentPhase === "reinforcement" && isMyTurn) {
+                          toggleTradeCard(cardId);
+                        }
+                      }}
+                      title={symbol ? `${prettyCardName(cardId)} • ${cardSymbolLabel(symbol)}` : prettyCardName(cardId)}
+                    >
                       <span className="hand-card-short">{prettyCardName(cardId).slice(0, 3).toUpperCase()}</span>
                       <span className="hand-card-full">{prettyCardName(cardId)}</span>
                     </div>
@@ -1750,6 +2567,103 @@ function App() {
           </div>
         </div>
       </footer>
+
+      {combatPopup?.visible ? (
+        <div className="combat-overlay">
+          <section className={`combat-popup ${combatPopup.rolling ? "rolling" : "resolved"}`}>
+            <header className="combat-popup-head">
+              <h3>Scontro Dadi</h3>
+                <small>
+                  {labelForTerritory(combatPopup.fromTerritoryId)} {"->"} {labelForTerritory(combatPopup.toTerritoryId)}
+                </small>
+            </header>
+            <div className="combat-columns">
+              <article className="combat-side attacker">
+                <h4>Attacco: {combatAttackerLabel}</h4>
+                <div className="combat-dice-row">
+                  {combatPopup.attackerRolls.map((roll, index) => (
+                    <div
+                      key={`atk-${index}-${roll}`}
+                      className={`dice-face d${roll} ${combatDiceOutcome.attacker[index] === "win" ? "dice-win" : ""} ${combatDiceOutcome.attacker[index] === "loss" ? "dice-loss" : ""}`.trim()}
+                    >
+                      <span>{roll}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="combat-losses">Perdite: {combatPopup.attackerLosses}</p>
+              </article>
+              <article className="combat-side defender">
+                <h4>Difesa: {combatDefenderLabel}</h4>
+                <div className="combat-dice-row">
+                  {combatPopup.defenderRolls.map((roll, index) => (
+                    <div
+                      key={`def-${index}-${roll}`}
+                      className={`dice-face d${roll} ${combatDiceOutcome.defender[index] === "win" ? "dice-win" : ""} ${combatDiceOutcome.defender[index] === "loss" ? "dice-loss" : ""}`.trim()}
+                    >
+                      <span>{roll}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="combat-losses">Perdite: {combatPopup.defenderLosses}</p>
+              </article>
+            </div>
+            <footer className="combat-popup-foot">
+              {combatPopup.rolling ? "Lancio in corso..." : "Risoluzione completata"}
+            </footer>
+          </section>
+        </div>
+      ) : null}
+
+      {hasPendingCaptureMove && isMyTurn && captureMoveReady ? (
+        <div className="capture-move-overlay">
+          <section className="capture-move-popup">
+            <header>
+              <h3>Territorio Conquistato</h3>
+              <small>
+                {labelForTerritory(pendingCaptureFrom)} {"->"} {labelForTerritory(pendingCaptureTo)}
+              </small>
+            </header>
+            <p>Scegli quante armate spostare nel territorio conquistato.</p>
+            <div className="capture-move-stepper">
+              <button
+                type="button"
+                className="btn-secondary stepper-btn"
+                onClick={() => setCaptureMoveArmies(current => Math.max(pendingCaptureMinArmies, current - 1))}
+                disabled={captureMoveArmies <= pendingCaptureMinArmies}
+              >
+                -
+              </button>
+              <span className="stepper-value">{captureMoveArmies}</span>
+              <button
+                type="button"
+                className="btn-secondary stepper-btn"
+                onClick={() => setCaptureMoveArmies(current => Math.min(pendingCaptureMaxArmies, current + 1))}
+                disabled={captureMoveArmies >= pendingCaptureMaxArmies}
+              >
+                +
+              </button>
+            </div>
+            <small>
+              Min: {pendingCaptureMinArmies} | Max: {pendingCaptureMaxArmies}
+            </small>
+            <div className="button-row">
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() =>
+                  submitCommand("MoveCapturedArmies", {
+                    fromTerritoryId: pendingCaptureFrom,
+                    toTerritoryId: pendingCaptureTo,
+                    armiesToMoveTotal: captureMoveArmies
+                  })
+                }
+              >
+                Conferma Spostamento
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {dealStage !== "idle" ? (
         <div className="deal-overlay global">
@@ -1769,28 +2683,49 @@ function App() {
             <div className={`deal-card territories svg ${dealFlyToHand ? "to-hand" : ""}`}>
               <h3>Distribuzione territori</h3>
               <p>{revealedTerritories.length} assegnati</p>
-              <div className="deal-territory-stack">
-                {revealedTerritories.slice(-9).map((id, index) => (
-                  <div
-                    key={`deal-${id}-${index}`}
-                    className="deal-territory-card"
-                    style={{ transform: `translate(${index * 3}px, ${index * 1.5}px) rotate(${(index - 4) * 1.1}deg)` }}
-                  >
-                    {svgForTerritoryCard(id)
-                      ? renderFlipCard(
-                          <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: svgForTerritoryCard(id)! }} />,
-                          <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: territoryCardBackRaw }} />,
-                          "flip-in territory",
-                          index * 85
-                        )
-                      : renderFlipCard(
-                          <div className="deal-territory-fallback">{escapeHtml(labelForTerritory(id))}</div>,
-                          <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: territoryCardBackRaw }} />,
-                          "flip-in territory",
-                          index * 85
-                        )}
-                  </div>
-                ))}
+              <div className="deal-territory-grid-shell">
+                <div
+                  className={`deal-territory-grid ${
+                    revealedTerritories.length > 20 ? "is-ultra-dense" : revealedTerritories.length > 15 ? "is-dense" : ""
+                  }`.trim()}
+                >
+                  {revealedTerritories.map((id, index) => {
+                    const isNewestFlipping = index === territoryFlipCount - 1;
+                    const hasFlipped = index < territoryFlipCount;
+                    const flipClass = isNewestFlipping ? "flip-in" : hasFlipped ? "face-up" : "";
+                    return (
+                      <div
+                        key={`deal-${id}`}
+                        className={`deal-territory-cell ${isNewestFlipping ? "is-new" : ""}`.trim()}
+                        ref={node => {
+                          dealCardRefs.current[id] = node;
+                        }}
+                        style={
+                          {
+                            ["--deal-index" as string]: `${index}`,
+                            ["--fly-x" as string]: `${(dealFlyVectors[id]?.x ?? 0).toFixed(2)}px`,
+                            ["--fly-y" as string]: `${(dealFlyVectors[id]?.y ?? 240).toFixed(2)}px`,
+                            ["--fly-rot" as string]: `${(dealFlyVectors[id]?.rot ?? 0).toFixed(2)}deg`
+                          } as CSSProperties
+                        }
+                      >
+                        {svgForTerritoryCard(id)
+                          ? renderFlipCard(
+                              <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: svgForTerritoryCard(id)! }} />,
+                              <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: territoryCardBackRaw }} />,
+                              flipClass,
+                              isNewestFlipping ? 20 : 0
+                            )
+                          : renderFlipCard(
+                              <div className="deal-territory-fallback">{escapeHtml(labelForTerritory(id))}</div>,
+                              <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: territoryCardBackRaw }} />,
+                              flipClass,
+                              isNewestFlipping ? 20 : 0
+                            )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
               {dealStage === "complete" ? <small>Le carte scorrono nella tua mano...</small> : null}
             </div>
@@ -1802,5 +2737,3 @@ function App() {
 }
 
 export default App;
-
-

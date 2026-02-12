@@ -149,16 +149,20 @@ public sealed class GameCommandHandler
             symbols.Add(symbol);
         }
 
-        if (!IsValidTradeSet(symbols))
+        if (!TryGetTradeBonus(symbols, out var baseBonus))
         {
             return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidCards, "Invalid trade set.");
         }
 
-        var bonus = GetTradeBonus(state.TradeBonusStep);
+        var territoryOwnerBonus = command.CardIds.Count(cardId =>
+            cardId.StartsWith("territory:", StringComparison.Ordinal) &&
+            state.TryGetTerritory(cardId["territory:".Length..], out var territory) &&
+            territory is not null &&
+            string.Equals(territory.OwnerPlayerId, command.PlayerId, StringComparison.Ordinal)) * 2;
+        var bonus = baseBonus + territoryOwnerBonus;
         var nextState = state
             .RemovePlayerCards(command.PlayerId, command.CardIds)
             .AddCardsToDrawPile(command.CardIds)
-            .WithTradeStep(state.TradeBonusStep + 1)
             .WithReinforcements(state.ReinforcementsAvailable + bonus);
 
         var evt = new CardsTradedEvent(
@@ -168,7 +172,7 @@ public sealed class GameCommandHandler
             command.PlayerId,
             command.CardIds,
             bonus,
-            nextState.TradeBonusStep);
+            state.TradeBonusStep);
 
         return CommandExecutionResult.Accepted(nextState, [new GameEventEnvelope(true, evt, command.CommandId)]);
     }
@@ -179,6 +183,15 @@ public sealed class GameCommandHandler
         if (ended is not null)
         {
             return ended;
+        }
+
+        if (!string.IsNullOrWhiteSpace(state.PendingCaptureFromTerritoryId) &&
+            !string.IsNullOrWhiteSpace(state.PendingCaptureToTerritoryId))
+        {
+            return CommandExecutionResult.Rejected(
+                state,
+                CommandErrorCode.InvalidPhase,
+                "Resolve captured armies movement before attacking again.");
         }
 
         if (state.Phase != TurnPhase.Attack)
@@ -246,7 +259,8 @@ public sealed class GameCommandHandler
 
         var nextState = state
             .SetTerritoryState(updatedFrom)
-            .SetTerritoryState(updatedTo);
+            .SetTerritoryState(updatedTo)
+            .ClearPendingCaptureMove();
 
         var wasCaptured = updatedTo.Armies <= 0;
         var eliminatedPlayerId = string.Empty;
@@ -263,10 +277,17 @@ public sealed class GameCommandHandler
                 Armies = armiesToMove
             };
 
+            var maxMoveTotal = capturedTo.Armies + Math.Max(0, capturedFrom.Armies - 1);
+
             nextState = nextState
                 .SetTerritoryState(capturedFrom)
                 .SetTerritoryState(capturedTo)
-                .MarkTerritoryCaptured(true);
+                .MarkTerritoryCaptured(true)
+                .WithPendingCaptureMove(
+                    command.FromTerritoryId,
+                    command.ToTerritoryId,
+                    capturedTo.Armies,
+                    Math.Max(capturedTo.Armies, maxMoveTotal));
 
             if (IsEliminated(nextState, toTerritory.OwnerPlayerId))
             {
@@ -286,6 +307,8 @@ public sealed class GameCommandHandler
             toTerritory.OwnerPlayerId,
             command.FromTerritoryId,
             command.ToTerritoryId,
+            attackerRolls,
+            defenderRolls,
             attackerLosses,
             defenderLosses);
 
@@ -327,6 +350,80 @@ public sealed class GameCommandHandler
         return CommandExecutionResult.Accepted(nextState, events);
     }
 
+    public CommandExecutionResult Handle(GameState state, MoveCapturedArmiesCommand command)
+    {
+        var ended = RejectIfGameEnded(state);
+        if (ended is not null)
+        {
+            return ended;
+        }
+
+        if (state.Phase != TurnPhase.Attack)
+        {
+            return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidPhase, "Not in attack phase.");
+        }
+
+        if (command.PlayerId != state.ActivePlayerId)
+        {
+            return CommandExecutionResult.Rejected(state, CommandErrorCode.NotActivePlayer, "Only active player can move captured armies.");
+        }
+
+        if (string.IsNullOrWhiteSpace(state.PendingCaptureFromTerritoryId) ||
+            string.IsNullOrWhiteSpace(state.PendingCaptureToTerritoryId))
+        {
+            return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidPhase, "No pending captured territory movement.");
+        }
+
+        if (!string.Equals(state.PendingCaptureFromTerritoryId, command.FromTerritoryId, StringComparison.Ordinal) ||
+            !string.Equals(state.PendingCaptureToTerritoryId, command.ToTerritoryId, StringComparison.Ordinal))
+        {
+            return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidOwnership, "Capture move territories do not match pending state.");
+        }
+
+        if (!state.TryGetTerritory(command.FromTerritoryId, out var fromTerritory) || fromTerritory is null ||
+            !state.TryGetTerritory(command.ToTerritoryId, out var toTerritory) || toTerritory is null)
+        {
+            return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidOwnership, "Territories not found.");
+        }
+
+        if (fromTerritory.OwnerPlayerId != command.PlayerId || toTerritory.OwnerPlayerId != command.PlayerId)
+        {
+            return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidOwnership, "Both territories must be owned by player.");
+        }
+
+        if (command.ArmiesToMoveTotal < state.PendingCaptureMinArmies || command.ArmiesToMoveTotal > state.PendingCaptureMaxArmies)
+        {
+            return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidArmyAmount, "Invalid captured armies movement amount.");
+        }
+
+        var currentTotalInCaptured = toTerritory.Armies;
+        var additionalToMove = command.ArmiesToMoveTotal - currentTotalInCaptured;
+        if (additionalToMove < 0 || additionalToMove >= fromTerritory.Armies)
+        {
+            return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidArmyAmount, "Invalid captured armies movement delta.");
+        }
+
+        var updatedFrom = fromTerritory with { Armies = fromTerritory.Armies - additionalToMove };
+        var updatedTo = toTerritory with { Armies = toTerritory.Armies + additionalToMove };
+
+        var nextState = state
+            .SetTerritoryState(updatedFrom)
+            .SetTerritoryState(updatedTo)
+            .ClearPendingCaptureMove();
+
+        var movedEvent = new CapturedArmiesMovedEvent(
+            state.MatchId,
+            NextSequence(),
+            DateTimeOffset.UtcNow,
+            command.PlayerId,
+            command.FromTerritoryId,
+            command.ToTerritoryId,
+            updatedFrom.Armies,
+            updatedTo.Armies);
+
+        return CommandExecutionResult.Accepted(nextState, [new GameEventEnvelope(true, movedEvent, command.CommandId)]);
+    }
+
     public CommandExecutionResult Handle(GameState state, FortifyCommand command)
     {
         var ended = RejectIfGameEnded(state);
@@ -338,6 +435,11 @@ public sealed class GameCommandHandler
         if (state.Phase != TurnPhase.Fortify)
         {
             return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidPhase, "Not in fortify phase.");
+        }
+
+        if (state.FortifyUsedThisTurn)
+        {
+            return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidPhase, "Fortify already used this turn.");
         }
 
         if (command.PlayerId != state.ActivePlayerId)
@@ -361,16 +463,17 @@ public sealed class GameCommandHandler
             return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidArmyAmount, "Invalid fortify amount.");
         }
 
-        if (!HasOwnedPath(state, command.PlayerId, fromTerritory.TerritoryId, toTerritory.TerritoryId))
+        if (!fromTerritory.IsAdjacentTo(toTerritory.TerritoryId))
         {
-            return CommandExecutionResult.Rejected(state, CommandErrorCode.InvalidPath, "No connected owned path for fortify.");
+            return CommandExecutionResult.Rejected(state, CommandErrorCode.NotAdjacent, "Fortify requires adjacent owned territories.");
         }
 
         var updatedFrom = fromTerritory with { Armies = fromTerritory.Armies - command.ArmiesToMove };
         var updatedTo = toTerritory with { Armies = toTerritory.Armies + command.ArmiesToMove };
         var nextState = state
             .SetTerritoryState(updatedFrom)
-            .SetTerritoryState(updatedTo);
+            .SetTerritoryState(updatedTo)
+            .MarkFortifyUsed(true);
 
         var events = new List<GameEventEnvelope>();
         if (TryResolveObjectiveWinner(nextState, command.PlayerId, out var fortifyWinnerPlayerId))
@@ -433,6 +536,14 @@ public sealed class GameCommandHandler
 
         if (state.Phase == TurnPhase.Attack)
         {
+            if (!string.IsNullOrWhiteSpace(state.PendingCaptureFromTerritoryId))
+            {
+                return CommandExecutionResult.Rejected(
+                    state,
+                    CommandErrorCode.InvalidPhase,
+                    "Resolve captured armies movement before ending attack phase.");
+            }
+
             var toFortify = state.WithPhase(TurnPhase.Fortify);
             var startedFortify = new TurnStartedEvent(
                 state.MatchId,
@@ -861,40 +972,54 @@ public sealed class GameCommandHandler
         return new Random(seed);
     }
 
-    private static bool IsValidTradeSet(IReadOnlyList<string> symbols)
+    private static bool TryGetTradeBonus(IReadOnlyList<string> symbols, out int bonus)
     {
+        bonus = 0;
+        if (symbols.Count != 3)
+        {
+            return false;
+        }
+
         var normalized = symbols.Select(value => value.ToLowerInvariant()).ToList();
         var jokerCount = normalized.Count(symbol => symbol == "joker");
+        if (jokerCount > 1)
+        {
+            return false;
+        }
+
         var nonJoker = normalized.Where(symbol => symbol != "joker").ToList();
 
-        if (nonJoker.Count == 0)
+        if (nonJoker.Count == 3)
         {
+            var distinct = nonJoker.Distinct(StringComparer.Ordinal).Count();
+            if (distinct == 1)
+            {
+                bonus = nonJoker[0] switch
+                {
+                    "artillery" => 4,
+                    "infantry" => 6,
+                    "cavalry" => 8,
+                    _ => 0
+                };
+                return bonus > 0;
+            }
+
+            if (distinct == 3)
+            {
+                bonus = 10;
+                return true;
+            }
+
+            return false;
+        }
+
+        if (jokerCount == 1 && nonJoker.Count == 2 && string.Equals(nonJoker[0], nonJoker[1], StringComparison.Ordinal))
+        {
+            bonus = 12;
             return true;
         }
 
-        var distinct = nonJoker.Distinct(StringComparer.Ordinal).Count();
-        if (distinct == 1)
-        {
-            return true;
-        }
-
-        if (distinct == 3 && nonJoker.Count == 3)
-        {
-            return true;
-        }
-
-        return jokerCount > 0 && distinct <= 2;
-    }
-
-    private static int GetTradeBonus(int tradeStep)
-    {
-        var sequence = new[] { 4, 6, 8, 10, 12, 15 };
-        if (tradeStep < sequence.Length)
-        {
-            return sequence[tradeStep];
-        }
-
-        return sequence[^1] + ((tradeStep - sequence.Length + 1) * 5);
+        return false;
     }
 
     private long NextSequence()

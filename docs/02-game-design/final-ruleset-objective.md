@@ -107,7 +107,7 @@ Capture:
 - leave at least 1 army in source.
 
 Profile default:
-- connectivity by owned path is required.
+- source and destination must be adjacent and both owned by the active player.
 
 ## 4.4 End Turn
 
@@ -131,9 +131,14 @@ Trade-in (`tris`) timing:
 - at reinforcement phase before placing armies.
 
 Valid sets:
-- three of same symbol
-- one of each symbol
-- sets using Joker as wildcard
+- three artillery = 4 armies
+- three infantry = 6 armies
+- three cavalry = 8 armies
+- one of each symbol = 10 armies
+- one Joker + two cards of the same symbol = 12 armies
+
+Territory card ownership bonus:
+- +2 armies for each traded territory card whose territory is currently owned by the player.
 
 Forced trade:
 - if hand size is at or above configured max, player must trade until below threshold.

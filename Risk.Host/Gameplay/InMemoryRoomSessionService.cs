@@ -6,6 +6,7 @@ namespace Risk.Host.Gameplay;
 
 public sealed class InMemoryRoomSessionService : IRoomSessionService
 {
+    private static readonly string[] PlayerColorCycle = ["red", "purple", "yellow", "green", "blue", "black"];
     private readonly ConcurrentDictionary<string, RoomSession> _rooms = new(StringComparer.Ordinal);
     private readonly IMatchSessionService _matchSessionService;
     private readonly MapPackLoader _mapPackLoader;
@@ -206,7 +207,7 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
         }
 
         var matchId = $"match-{Guid.NewGuid():N}";
-        var rngSeed = request.RngSeed ?? 12345;
+        var rngSeed = request.RngSeed ?? Random.Shared.Next(1, int.MaxValue);
         var random = new Random(rngSeed);
         var shuffledTerritories = Shuffle(pack.Territories.Select(t => t.Id).ToList(), random);
 
@@ -296,25 +297,61 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
         IReadOnlyList<PlayerState> players,
         Random random)
     {
-        var objectiveDeck = BuildOfficialObjectiveDeck();
-        var shuffledDeck = Shuffle(objectiveDeck.ToList(), random);
+        var playerColorById = players
+            .Select((player, index) => new { player.PlayerId, Color = PlayerColorCycle[index % PlayerColorCycle.Length] })
+            .ToDictionary(x => x.PlayerId, x => x.Color, StringComparer.Ordinal);
+        var colorsPresent = new HashSet<string>(playerColorById.Values, StringComparer.Ordinal);
+        var deck = Shuffle(BuildOfficialObjectiveDeck().ToList(), random);
         var objectives = new Dictionary<string, PlayerObjectiveState>(StringComparer.Ordinal);
 
         for (var i = 0; i < players.Count; i++)
         {
             var owner = players[i];
-            var template = shuffledDeck[i % shuffledDeck.Count];
-            objectives[owner.PlayerId] = MaterializeObjective(template, owner, players, random);
+            var chosenIndex = deck.FindIndex(template => IsObjectiveCompatible(template, owner.PlayerId, playerColorById, colorsPresent));
+            var template = chosenIndex >= 0 ? deck[chosenIndex] : null;
+            if (chosenIndex >= 0)
+            {
+                deck.RemoveAt(chosenIndex);
+            }
+
+            objectives[owner.PlayerId] = template is null
+                ? BuildFallbackTerritoryObjective(owner.PlayerId)
+                : MaterializeObjective(template, owner, players, playerColorById);
         }
 
         return objectives;
+    }
+
+    private static bool IsObjectiveCompatible(
+        ObjectiveTemplate template,
+        string ownerPlayerId,
+        IReadOnlyDictionary<string, string> playerColorById,
+        IReadOnlySet<string> colorsPresent)
+    {
+        if (!string.Equals(template.Kind, "eliminate_player", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(template.EliminateColor))
+        {
+            return false;
+        }
+
+        if (!playerColorById.TryGetValue(ownerPlayerId, out var ownerColor))
+        {
+            return false;
+        }
+
+        return colorsPresent.Contains(template.EliminateColor) &&
+               !string.Equals(ownerColor, template.EliminateColor, StringComparison.Ordinal);
     }
 
     private static PlayerObjectiveState MaterializeObjective(
         ObjectiveTemplate template,
         PlayerState owner,
         IReadOnlyList<PlayerState> players,
-        Random random)
+        IReadOnlyDictionary<string, string> playerColorById)
     {
         if (!string.Equals(template.Kind, "eliminate_player", StringComparison.Ordinal))
         {
@@ -331,21 +368,28 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
                 null);
         }
 
-        var candidates = players
-            .Where(player => !string.Equals(player.PlayerId, owner.PlayerId, StringComparison.Ordinal))
-            .ToList();
-
-        if (candidates.Count == 0)
+        if (string.IsNullOrWhiteSpace(template.EliminateColor))
         {
             return BuildFallbackTerritoryObjective(owner.PlayerId);
         }
 
-        var chosen = candidates[random.Next(candidates.Count)];
-        var description = $"Eliminate player {chosen.DisplayName} ({chosen.PlayerId}). If impossible, conquer 24 territories.";
+        var chosen = players.FirstOrDefault(player =>
+            !string.Equals(player.PlayerId, owner.PlayerId, StringComparison.Ordinal) &&
+            playerColorById.TryGetValue(player.PlayerId, out var color) &&
+            string.Equals(color, template.EliminateColor, StringComparison.Ordinal));
+
+        if (chosen is null)
+        {
+            return BuildFallbackTerritoryObjective(owner.PlayerId);
+        }
+
+        var colorName = ToItalianColorName(template.EliminateColor);
+        var title = $"Distruggi {colorName}";
+        var description = $"Distruggi totalmente l'armata {colorName}. Se impossibile, conquista 24 territori.";
         return new PlayerObjectiveState(
             owner.PlayerId,
             $"{template.ObjectiveId}:{chosen.PlayerId}",
-            "Eliminate Opponent",
+            title,
             description,
             "eliminate_player",
             TargetTerritoryCount: 24,
@@ -365,55 +409,61 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
     [
         new(
             "obj-24",
-            "Conquer 24 Territories",
-            "Conquer 24 territories.",
+            "Conquista 24 Territori",
+            "Conquista 24 territori.",
             "territory_count",
             TargetTerritoryCount: 24),
         new(
             "obj-18-2",
-            "Conquer 18 with 2+ Armies",
-            "Conquer 18 territories with at least 2 armies on each.",
+            "Conquista 18 con 2 Armate",
+            "Conquista 18 territori e occupali con almeno 2 armate ciascuno.",
             "territory_with_min_armies",
             TargetTerritoryCount: 18,
             RequiredArmiesPerTerritory: 2),
         new(
             "obj-eu-au-plus1",
-            "Europe + Australia + 1",
-            "Conquer Europe, Australia, and one additional continent.",
+            "Europa + Oceania + 1",
+            "Conquista Europa, Oceania e un altro continente a scelta.",
             "continent_combo",
             RequiredContinentIds: ["europe", "australia"],
             RequiredAdditionalContinentCount: 1),
         new(
             "obj-eu-sa-plus1",
-            "Europe + South America + 1",
-            "Conquer Europe, South America, and one additional continent.",
+            "Europa + Sud America + 1",
+            "Conquista Europa, Sud America e un altro continente a scelta.",
             "continent_combo",
             RequiredContinentIds: ["europe", "south_america"],
             RequiredAdditionalContinentCount: 1),
         new(
             "obj-na-af",
-            "North America + Africa",
-            "Conquer North America and Africa.",
+            "Nord America + Africa",
+            "Conquista Nord America e Africa.",
             "continent_combo",
             RequiredContinentIds: ["north_america", "africa"]),
         new(
             "obj-na-au",
-            "North America + Australia",
-            "Conquer North America and Australia.",
+            "Nord America + Oceania",
+            "Conquista Nord America e Oceania.",
             "continent_combo",
             RequiredContinentIds: ["north_america", "australia"]),
         new(
             "obj-as-sa",
-            "Asia + South America",
-            "Conquer Asia and South America.",
+            "Asia + Sud America",
+            "Conquista Asia e Sud America.",
             "continent_combo",
             RequiredContinentIds: ["asia", "south_america"]),
-        new("obj-elim-red", "Eliminate Red", "Eliminate the red player.", "eliminate_player"),
-        new("obj-elim-blue", "Eliminate Blue", "Eliminate the blue player.", "eliminate_player"),
-        new("obj-elim-green", "Eliminate Green", "Eliminate the green player.", "eliminate_player"),
-        new("obj-elim-yellow", "Eliminate Yellow", "Eliminate the yellow player.", "eliminate_player"),
-        new("obj-elim-purple", "Eliminate Purple", "Eliminate the purple player.", "eliminate_player"),
-        new("obj-elim-black", "Eliminate Black", "Eliminate the black player.", "eliminate_player")
+        new(
+            "obj-as-af",
+            "Asia + Africa",
+            "Conquista Asia e Africa.",
+            "continent_combo",
+            RequiredContinentIds: ["asia", "africa"]),
+        new("obj-elim-red", "Distruggi Rosso", "Distruggi totalmente l'armata rossa.", "eliminate_player", EliminateColor: "red"),
+        new("obj-elim-blue", "Distruggi Blu", "Distruggi totalmente l'armata blu.", "eliminate_player", EliminateColor: "blue"),
+        new("obj-elim-green", "Distruggi Verde", "Distruggi totalmente l'armata verde.", "eliminate_player", EliminateColor: "green"),
+        new("obj-elim-yellow", "Distruggi Giallo", "Distruggi totalmente l'armata gialla.", "eliminate_player", EliminateColor: "yellow"),
+        new("obj-elim-purple", "Distruggi Viola", "Distruggi totalmente l'armata viola.", "eliminate_player", EliminateColor: "purple"),
+        new("obj-elim-black", "Distruggi Nero", "Distruggi totalmente l'armata nera.", "eliminate_player", EliminateColor: "black")
     ];
 
     private static (IReadOnlyDictionary<string, string> cardSymbolById, IReadOnlyList<string> drawPileCardIds) BuildShuffledDeck(
@@ -469,7 +519,20 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
         int TargetTerritoryCount = 0,
         int RequiredArmiesPerTerritory = 0,
         IReadOnlyList<string>? RequiredContinentIds = null,
-        int RequiredAdditionalContinentCount = 0);
+        int RequiredAdditionalContinentCount = 0,
+        string? EliminateColor = null);
+
+    private static string ToItalianColorName(string colorId) =>
+        colorId.ToLowerInvariant() switch
+        {
+            "red" => "Rossa",
+            "blue" => "Blu",
+            "green" => "Verde",
+            "yellow" => "Gialla",
+            "purple" => "Viola",
+            "black" => "Nera",
+            _ => colorId
+        };
 
     private sealed class RoomSession
     {

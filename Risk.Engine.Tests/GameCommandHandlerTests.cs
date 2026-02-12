@@ -131,7 +131,40 @@ public class GameCommandHandlerTests
         var result = _handler.Handle(state, command);
 
         Assert.False(result.Validation.IsValid);
-        Assert.Equal(CommandErrorCode.InvalidPath, result.Validation.ErrorCode);
+        Assert.Equal(CommandErrorCode.NotAdjacent, result.Validation.ErrorCode);
+    }
+
+    [Fact]
+    public void Fortify_SecondMoveInSameTurn_IsRejected()
+    {
+        var state = BuildState(phase: TurnPhase.Fortify, activePlayerId: "p1", reinforcementPool: 0);
+
+        var first = _handler.Handle(state, new FortifyCommand("match-1", "p1", "cmd-fortify-r1", "alaska", "kamchatka", 2));
+        Assert.True(first.Validation.IsValid);
+        Assert.Equal(TurnPhase.Fortify, first.State.Phase);
+        Assert.Equal("p1", first.State.ActivePlayerId);
+        Assert.True(first.State.FortifyUsedThisTurn);
+
+        var second = _handler.Handle(first.State, new FortifyCommand("match-1", "p1", "cmd-fortify-r2", "kamchatka", "alaska", 1));
+        Assert.False(second.Validation.IsValid);
+        Assert.Equal(CommandErrorCode.InvalidPhase, second.Validation.ErrorCode);
+        Assert.Equal(TurnPhase.Fortify, second.State.Phase);
+        Assert.Equal("p1", second.State.ActivePlayerId);
+        Assert.Equal(4, second.State.Territories["kamchatka"].Armies);
+        Assert.Equal(4, second.State.Territories["alaska"].Armies);
+    }
+
+    [Fact]
+    public void Fortify_CannotMoveAllArmies_OneMustRemain()
+    {
+        var state = BuildState(phase: TurnPhase.Fortify, activePlayerId: "p1", reinforcementPool: 0);
+
+        var result = _handler.Handle(
+            state,
+            new FortifyCommand("match-1", "p1", "cmd-fortify-all", "kamchatka", "greenland", 2));
+
+        Assert.False(result.Validation.IsValid);
+        Assert.Equal(CommandErrorCode.InvalidArmyAmount, result.Validation.ErrorCode);
     }
 
     [Fact]
@@ -264,10 +297,100 @@ public class GameCommandHandlerTests
             new PlayCardsCommand("match-1", "p1", "cmd-play-cards", ["c1", "c2", "c3"]));
 
         Assert.True(result.Validation.IsValid);
-        Assert.Equal(9, result.State.ReinforcementsAvailable);
+        Assert.Equal(15, result.State.ReinforcementsAvailable);
         Assert.Empty(result.State.GetPlayerCardIds("p1"));
-        Assert.Equal(1, result.State.TradeBonusStep);
         Assert.Contains(result.EventEnvelopes, envelope => envelope.Event is CardsTradedEvent);
+    }
+
+    [Fact]
+    public void PlayCards_ThreeArtillery_GivesFourBonus()
+    {
+        var cardHands = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["p1"] = ["a1", "a2", "a3"],
+            ["p2"] = []
+        };
+        var cardSymbols = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["a1"] = "artillery",
+            ["a2"] = "artillery",
+            ["a3"] = "artillery"
+        };
+        var state = BuildState(TurnPhase.Reinforcement, "p1", 5, cardHands, cardSymbols);
+
+        var result = _handler.Handle(state, new PlayCardsCommand("match-1", "p1", "cmd-play-art", ["a1", "a2", "a3"]));
+
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal(9, result.State.ReinforcementsAvailable);
+    }
+
+    [Fact]
+    public void PlayCards_JokerWithTwoSame_GivesTwelveBonus()
+    {
+        var cardHands = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["p1"] = ["i1", "i2", "j1"],
+            ["p2"] = []
+        };
+        var cardSymbols = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["i1"] = "infantry",
+            ["i2"] = "infantry",
+            ["j1"] = "joker"
+        };
+        var state = BuildState(TurnPhase.Reinforcement, "p1", 5, cardHands, cardSymbols);
+
+        var result = _handler.Handle(state, new PlayCardsCommand("match-1", "p1", "cmd-play-joker", ["i1", "i2", "j1"]));
+
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal(17, result.State.ReinforcementsAvailable);
+    }
+
+    [Fact]
+    public void PlayCards_JokerWithTwoDifferent_IsRejected()
+    {
+        var cardHands = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["p1"] = ["i1", "c1", "j1"],
+            ["p2"] = []
+        };
+        var cardSymbols = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["i1"] = "infantry",
+            ["c1"] = "cavalry",
+            ["j1"] = "joker"
+        };
+        var state = BuildState(TurnPhase.Reinforcement, "p1", 5, cardHands, cardSymbols);
+
+        var result = _handler.Handle(state, new PlayCardsCommand("match-1", "p1", "cmd-play-invalid-joker", ["i1", "c1", "j1"]));
+
+        Assert.False(result.Validation.IsValid);
+        Assert.Equal(CommandErrorCode.InvalidCards, result.Validation.ErrorCode);
+    }
+
+    [Fact]
+    public void PlayCards_AddsOwnedTerritoryBonus()
+    {
+        var cardHands = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["p1"] = ["territory:alaska", "territory:kamchatka", "territory:greenland"],
+            ["p2"] = []
+        };
+        var cardSymbols = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["territory:alaska"] = "infantry",
+            ["territory:kamchatka"] = "cavalry",
+            ["territory:greenland"] = "artillery"
+        };
+        var state = BuildState(TurnPhase.Reinforcement, "p1", 5, cardHands, cardSymbols);
+
+        var result = _handler.Handle(
+            state,
+            new PlayCardsCommand("match-1", "p1", "cmd-play-owned-territory", ["territory:alaska", "territory:kamchatka", "territory:greenland"]));
+
+        Assert.True(result.Validation.IsValid);
+        // mixed set = 10, plus 3 owned territories * 2 = 6
+        Assert.Equal(21, result.State.ReinforcementsAvailable);
     }
 
     [Fact]

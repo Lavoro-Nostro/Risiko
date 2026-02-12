@@ -14,6 +14,7 @@ public sealed record GameState
     public required string ActivePlayerId { get; init; }
     public required int ReinforcementsAvailable { get; init; }
     public required bool TerritoryCapturedThisTurn { get; init; }
+    public required bool FortifyUsedThisTurn { get; init; }
     public required int RngSeed { get; init; }
     public required IReadOnlyDictionary<string, PlayerObjectiveState> ObjectivesByPlayerId { get; init; }
     public required string? WinnerPlayerId { get; init; }
@@ -21,6 +22,10 @@ public sealed record GameState
     public required IReadOnlyDictionary<string, string> CardSymbolById { get; init; }
     public required IReadOnlyList<string> DrawPileCardIds { get; init; }
     public required int TradeBonusStep { get; init; }
+    public required string? PendingCaptureFromTerritoryId { get; init; }
+    public required string? PendingCaptureToTerritoryId { get; init; }
+    public required int PendingCaptureMinArmies { get; init; }
+    public required int PendingCaptureMaxArmies { get; init; }
 
     public static GameState CreateInitial(
         string matchId,
@@ -47,13 +52,18 @@ public sealed record GameState
             ActivePlayerId = activePlayerId,
             ReinforcementsAvailable = reinforcementPool,
             TerritoryCapturedThisTurn = false,
+            FortifyUsedThisTurn = false,
             RngSeed = rngSeed,
             ObjectivesByPlayerId = objectivesByPlayerId ?? new Dictionary<string, PlayerObjectiveState>(StringComparer.Ordinal),
             WinnerPlayerId = null,
             CardIdsByPlayerId = cardIdsByPlayerId ?? BuildEmptyCardHands(players),
             CardSymbolById = cardSymbolById ?? new Dictionary<string, string>(StringComparer.Ordinal),
             DrawPileCardIds = drawPileCardIds ?? [],
-            TradeBonusStep = tradeBonusStep
+            TradeBonusStep = tradeBonusStep,
+            PendingCaptureFromTerritoryId = null,
+            PendingCaptureToTerritoryId = null,
+            PendingCaptureMinArmies = 0,
+            PendingCaptureMaxArmies = 0
         };
 
     public GameState WithPhase(TurnPhase phase) => this with { Phase = phase };
@@ -63,6 +73,9 @@ public sealed record GameState
 
     public GameState MarkTerritoryCaptured(bool captured = true) =>
         this with { TerritoryCapturedThisTurn = captured };
+
+    public GameState MarkFortifyUsed(bool used = true) =>
+        this with { FortifyUsedThisTurn = used };
 
     public GameState SetWinner(string winnerPlayerId) =>
         this with { WinnerPlayerId = winnerPlayerId };
@@ -88,7 +101,8 @@ public sealed record GameState
             ActivePlayerId = nextActivePlayerId,
             Phase = TurnPhase.Reinforcement,
             ReinforcementsAvailable = nextReinforcementPool,
-            TerritoryCapturedThisTurn = false
+            TerritoryCapturedThisTurn = false,
+            FortifyUsedThisTurn = false
         };
 
     public GameState SetTerritoryState(TerritoryState territoryState)
@@ -186,6 +200,24 @@ public sealed record GameState
     }
 
     public GameState WithTradeStep(int tradeBonusStep) => this with { TradeBonusStep = tradeBonusStep };
+
+    public GameState WithPendingCaptureMove(string fromTerritoryId, string toTerritoryId, int minArmies, int maxArmies) =>
+        this with
+        {
+            PendingCaptureFromTerritoryId = fromTerritoryId,
+            PendingCaptureToTerritoryId = toTerritoryId,
+            PendingCaptureMinArmies = minArmies,
+            PendingCaptureMaxArmies = maxArmies
+        };
+
+    public GameState ClearPendingCaptureMove() =>
+        this with
+        {
+            PendingCaptureFromTerritoryId = null,
+            PendingCaptureToTerritoryId = null,
+            PendingCaptureMinArmies = 0,
+            PendingCaptureMaxArmies = 0
+        };
 
     private static IReadOnlyDictionary<string, IReadOnlyList<string>> BuildEmptyCardHands(
         IReadOnlyList<PlayerState> players)
