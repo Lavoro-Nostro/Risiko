@@ -42,6 +42,18 @@ type OverlayTuning = {
   fontScale?: number;
 };
 
+type TerritoryMask = {
+  minX: number;
+  minY: number;
+  width: number;
+  height: number;
+  alpha: Uint8Array;
+  borderPoints: Uint32Array;
+  centerX: number;
+  centerY: number;
+  area: number;
+};
+
 const TERRITORY_OVERLAY_TUNING: Record<string, OverlayTuning> = {
   north_west_territory: { labelDx: -4, labelDy: -5, fontScale: 0.9 },
   ontario: { labelDx: 5, labelDy: 2, fontScale: 0.86 },
@@ -223,22 +235,58 @@ const PREF_KEY = "RisiKo!.ui.v4";
 const PLAYER_COLORS = ["#e43c39", "#7d49dc", "#e6c42b", "#2ecb4f", "#2a6ae0", "#141414"];
 const PLAYER_CARD_ASSETS = [playerCardRed, playerCardPurple, playerCardYellow, playerCardGreen, playerCardBlue, playerCardBlack];
 const PLAYER_TANK_ASSETS = [tankRed, tankPurple, tankYellow, tankGreen, tankBlue, tankBlack];
+const MAX_MAP_DISPLAY_WIDTH = 1480;
 const OBJECTIVE_CARD_BASE = objectiveCardTemplateRaw
   .replace("Titolo Missione", "")
   .replace("Testo missione qui", "");
-const territoryCardModules = import.meta.glob("@packs/maps/world-classic/cards/territory/*.svg", {
+const territoryCardPngBaseModules = import.meta.glob("@packs/territories-png/*.png", {
   eager: true,
-  import: "default",
-  query: "?raw"
+  import: "default"
+}) as Record<string, string>;
+const territoryCardPngUpscaledModules = import.meta.glob("@packs/territories-png-upscaled/*.png", {
+  eager: true,
+  import: "default"
 }) as Record<string, string>;
 
-const territoryCardSvgById = Object.entries(territoryCardModules).reduce<Record<string, string>>((map, [path, svg]) => {
+const territoryCardTemplateModules = import.meta.glob("@packs/maps/world-classic/cards/territory/*.svg", {
+  eager: true,
+  import: "default"
+}) as Record<string, string>;
+
+const territoryCardPngBaseById = Object.entries(territoryCardPngBaseModules).reduce<Record<string, string>>((map, [path, pngUrl]) => {
+  const fileName = path.split("/").pop()?.replace(".png", "");
+  if (!fileName) {
+    return map;
+  }
+  const territoryId = fileName.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (territoryId === "world_map") {
+    return map;
+  }
+  map[territoryId] = pngUrl;
+  return map;
+}, {});
+const territoryCardPngUpscaledById = Object.entries(territoryCardPngUpscaledModules).reduce<Record<string, string>>((map, [path, pngUrl]) => {
+  const fileName = path.split("/").pop()?.replace(".png", "");
+  if (!fileName) {
+    return map;
+  }
+  const territoryId = fileName.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (territoryId === "world_map") {
+    return map;
+  }
+  map[territoryId] = pngUrl;
+  return map;
+}, {});
+const territoryCardPngById = { ...territoryCardPngBaseById, ...territoryCardPngUpscaledById };
+const territoryMapPngById = territoryCardPngBaseById;
+
+const territoryCardTemplateById = Object.entries(territoryCardTemplateModules).reduce<Record<string, string>>((map, [path, svgUrl]) => {
   const fileName = path.split("/").pop()?.replace(".svg", "");
   if (!fileName) {
     return map;
   }
-  const territoryId = fileName.toLowerCase();
-  map[territoryId] = svg;
+  const territoryId = fileName.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  map[territoryId] = svgUrl;
   return map;
 }, {});
 
@@ -404,6 +452,13 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function clampInRange(value: number, min: number, max: number): number {
+  if (min > max) {
+    return (min + max) / 2;
+  }
+  return clamp(value, min, max);
+}
+
 function normalizeLoopedOffsetX(x: number, mapWorldWidth: number): number {
   if (!Number.isFinite(mapWorldWidth) || mapWorldWidth <= 0) {
     return x;
@@ -458,17 +513,71 @@ function splitTerritoryLabel(text: string): string[] {
   return lines.slice(0, 3);
 }
 
-function toTerritoryFileBase(territoryId: string): string {
-  return territoryId
-    .split("_")
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join("_")
-    .toLowerCase();
+function pngForTerritoryCard(territoryId: string): string | null {
+  return territoryCardPngById[territoryId] ?? null;
 }
 
-function svgForTerritoryCard(territoryId: string): string | null {
-  const key = toTerritoryFileBase(territoryId);
-  return territoryCardSvgById[key] ?? null;
+function templateForTerritoryCard(territoryId: string): string | null {
+  return territoryCardTemplateById[territoryId] ?? null;
+}
+
+async function cropTransparentPng(sourceUrl: string): Promise<string> {
+  const image = new Image();
+  image.decoding = "async";
+  image.src = sourceUrl;
+  await image.decode();
+
+  const width = Math.max(1, Math.floor(image.naturalWidth || image.width));
+  const height = Math.max(1, Math.floor(image.naturalHeight || image.height));
+
+  const scanCanvas = document.createElement("canvas");
+  scanCanvas.width = width;
+  scanCanvas.height = height;
+  const scanContext = scanCanvas.getContext("2d");
+  if (!scanContext) {
+    return sourceUrl;
+  }
+  scanContext.drawImage(image, 0, 0, width, height);
+  const pixels = scanContext.getImageData(0, 0, width, height).data;
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  const alphaThreshold = 28;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const alpha = pixels[(y * width + x) * 4 + 3];
+      if (alpha <= alphaThreshold) {
+        continue;
+      }
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return sourceUrl;
+  }
+
+  const padding = Math.max(4, Math.round(Math.min(width, height) * 0.008));
+  const cropX = Math.max(0, minX - padding);
+  const cropY = Math.max(0, minY - padding);
+  const cropWidth = Math.min(width - cropX, maxX - minX + 1 + padding * 2);
+  const cropHeight = Math.min(height - cropY, maxY - minY + 1 + padding * 2);
+
+  const outCanvas = document.createElement("canvas");
+  outCanvas.width = cropWidth;
+  outCanvas.height = cropHeight;
+  const outContext = outCanvas.getContext("2d");
+  if (!outContext) {
+    return sourceUrl;
+  }
+  outContext.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  return outCanvas.toDataURL("image/png");
 }
 
 function isLikelySetupComplete(state: HostGameState | null, phase: string): boolean {
@@ -516,8 +625,9 @@ function canFortifyAdjacent(
 }
 
 function App() {
-  const mapRef = useRef<HTMLDivElement | null>(null);
+  const mapImageRef = useRef<HTMLImageElement | null>(null);
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
+  const territoryMasksRef = useRef<Record<string, TerritoryMask>>({});
   const chatLastSequenceRef = useRef(0);
   const dealStartedMatchRef = useRef<string | null>(null);
   const dealTimerIdsRef = useRef<number[]>([]);
@@ -527,6 +637,7 @@ function App() {
   const combatCloseTimerRef = useRef<number | null>(null);
   const panRafRef = useRef<number | null>(null);
   const pendingPanOffsetRef = useRef<{ x: number; y: number } | null>(null);
+  const panMovedRef = useRef(false);
 
   const boot = useMemo(() => {
     try {
@@ -571,6 +682,10 @@ function App() {
   const [dealFlyToHand, setDealFlyToHand] = useState(false);
   const [setupDeckVisible, setSetupDeckVisible] = useState(true);
   const [dealFlyVectors, setDealFlyVectors] = useState<Record<string, { x: number; y: number; rot: number }>>({});
+  const [croppedTerritoryCardById, setCroppedTerritoryCardById] = useState<Record<string, string>>({});
+  const [mapBoardImageUrl, setMapBoardImageUrl] = useState("");
+  const [mapBordersOverlayUrl, setMapBordersOverlayUrl] = useState("");
+  const [mapSelectionOverlayUrl, setMapSelectionOverlayUrl] = useState("");
   const [combatPopup, setCombatPopup] = useState<{
     visible: boolean;
     rolling: boolean;
@@ -584,6 +699,252 @@ function App() {
     defenderRolls: number[];
   } | null>(null);
   const [captureMoveArmies, setCaptureMoveArmies] = useState(1);
+
+  const territoryCardImageById = useMemo(
+    () => ({ ...territoryCardPngById, ...croppedTerritoryCardById }),
+    [croppedTerritoryCardById]
+  );
+
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      const entries = Object.entries(territoryCardPngById);
+      const croppedEntries = await Promise.all(
+        entries.map(async ([id, url]) => {
+          try {
+            const cropped = await cropTransparentPng(url);
+            return [id, cropped] as const;
+          } catch {
+            return [id, url] as const;
+          }
+        })
+      );
+      if (!active) {
+        return;
+      }
+      setCroppedTerritoryCardById(Object.fromEntries(croppedEntries));
+    };
+    void run();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const buildMasks = async () => {
+      const firstTerritoryId = worldClassic.map.territories.find(territory => territoryMapPngById[territory.id])?.id;
+      if (!firstTerritoryId) {
+        return;
+      }
+      const firstImage = new Image();
+      firstImage.decoding = "async";
+      firstImage.src = territoryMapPngById[firstTerritoryId];
+      await firstImage.decode();
+      const mapWidth = Math.max(1, firstImage.naturalWidth || 1000);
+      const mapHeight = Math.max(1, firstImage.naturalHeight || 700);
+      const dprScale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+      const renderScale = Math.max(1, Math.ceil((MAX_MAP_DISPLAY_WIDTH * dprScale) / mapWidth));
+      if (!active) {
+        return;
+      }
+      setMapPixelSize({ width: mapWidth, height: mapHeight });
+      setMapRenderScale(renderScale);
+      setMapViewBox(`0 0 ${mapWidth} ${mapHeight}`);
+
+      const nextMasks: Record<string, TerritoryMask> = {};
+      const nextOverlays: TerritoryOverlay[] = [];
+      const boardCanvas = document.createElement("canvas");
+      boardCanvas.width = mapWidth * renderScale;
+      boardCanvas.height = mapHeight * renderScale;
+      const boardContext = boardCanvas.getContext("2d");
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = mapWidth;
+      tempCanvas.height = mapHeight;
+      const tempContext = tempCanvas.getContext("2d");
+      if (!boardContext || !tempContext) {
+        return;
+      }
+      boardContext.setTransform(1, 0, 0, 1, 0, 0);
+      boardContext.clearRect(0, 0, boardCanvas.width, boardCanvas.height);
+      boardContext.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+
+      for (const territory of worldClassic.map.territories) {
+        const source = territoryMapPngById[territory.id];
+        if (!source) {
+          continue;
+        }
+        try {
+          const img = new Image();
+          img.decoding = "async";
+          img.src = source;
+          await img.decode();
+          boardContext.drawImage(img, 0, 0, mapWidth, mapHeight);
+
+          tempContext.clearRect(0, 0, mapWidth, mapHeight);
+          tempContext.drawImage(img, 0, 0, mapWidth, mapHeight);
+          const data = tempContext.getImageData(0, 0, mapWidth, mapHeight).data;
+
+          let minX = mapWidth;
+          let minY = mapHeight;
+          let maxX = -1;
+          let maxY = -1;
+          let sumX = 0;
+          let sumY = 0;
+          let area = 0;
+          for (let y = 0; y < mapHeight; y += 1) {
+            for (let x = 0; x < mapWidth; x += 1) {
+              const alpha = data[(y * mapWidth + x) * 4 + 3];
+              if (alpha <= 6) {
+                continue;
+              }
+              if (x < minX) minX = x;
+              if (y < minY) minY = y;
+              if (x > maxX) maxX = x;
+              if (y > maxY) maxY = y;
+              sumX += x;
+              sumY += y;
+              area += 1;
+            }
+          }
+          if (maxX < minX || maxY < minY || area <= 0) {
+            continue;
+          }
+
+          const boxWidth = maxX - minX + 1;
+          const boxHeight = maxY - minY + 1;
+          const alphaMask = new Uint8Array(boxWidth * boxHeight);
+          for (let y = minY; y <= maxY; y += 1) {
+            for (let x = minX; x <= maxX; x += 1) {
+              alphaMask[(y - minY) * boxWidth + (x - minX)] = data[(y * mapWidth + x) * 4 + 3];
+            }
+          }
+          const borderPoints: number[] = [];
+          for (let y = 0; y < boxHeight; y += 1) {
+            for (let x = 0; x < boxWidth; x += 1) {
+              const current = alphaMask[y * boxWidth + x];
+              if (current <= 10) {
+                continue;
+              }
+              const left = x > 0 ? alphaMask[y * boxWidth + (x - 1)] : 0;
+              const right = x < boxWidth - 1 ? alphaMask[y * boxWidth + (x + 1)] : 0;
+              const up = y > 0 ? alphaMask[(y - 1) * boxWidth + x] : 0;
+              const down = y < boxHeight - 1 ? alphaMask[(y + 1) * boxWidth + x] : 0;
+              if (left <= 10 || right <= 10 || up <= 10 || down <= 10) {
+                borderPoints.push((x & 0xffff) | ((y & 0xffff) << 16));
+              }
+            }
+          }
+
+          const centerX = sumX / area;
+          const centerY = sumY / area;
+          nextMasks[territory.id] = {
+            minX,
+            minY,
+            width: boxWidth,
+            height: boxHeight,
+            alpha: alphaMask,
+            borderPoints: Uint32Array.from(borderPoints),
+            centerX,
+            centerY,
+            area
+          };
+
+          const text = labelForTerritory(territory.id);
+          const textLines = splitTerritoryLabel(text);
+          const longestLineLength = Math.max(...textLines.map(line => line.length));
+          const tuning = TERRITORY_OVERLAY_TUNING[territory.id] ?? {};
+          const territorySpan = Math.max(8, Math.min(boxWidth, boxHeight));
+          const chipRadius = clamp(territorySpan * 0.14, 5.5, 10.5);
+          const widthLimited = (boxWidth * 0.7) / Math.max(4, longestLineLength * 0.6);
+          const lineCount = textLines.length;
+          const heightLimited = (boxHeight * 0.27) / Math.max(1, lineCount);
+          const tunedBase = Math.min(widthLimited, heightLimited) * (tuning.fontScale ?? 1);
+          const labelFontSize = clamp(tunedBase, 4.1, 6.3);
+          const labelWidth = Math.max(30, longestLineLength * labelFontSize * 0.56);
+          const labelHeight = Math.max(9.2, labelFontSize * 1.12 * lineCount);
+          const innerPadX = Math.max(4, boxWidth * 0.11);
+          const innerPadY = Math.max(4, boxHeight * 0.11);
+          const innerLeft = minX + innerPadX;
+          const innerRight = maxX - innerPadX;
+          const innerTop = minY + innerPadY;
+          const innerBottom = maxY - innerPadY;
+          const chipX = clampInRange(centerX + (tuning.chipDx ?? 0), innerLeft + chipRadius, innerRight - chipRadius);
+          const baseChipY = centerY + Math.max(chipRadius * 1.2, labelHeight * 0.46 + 4.6) + (tuning.chipDy ?? 0);
+          const chipY = clampInRange(baseChipY, innerTop + chipRadius + 2, innerBottom - chipRadius - 2);
+          const desiredLabelX = centerX + (tuning.labelDx ?? 0);
+          const labelX = clampInRange(desiredLabelX, minX + labelWidth * 0.5 + 2, maxX - labelWidth * 0.5 - 2);
+          const labelClearance = Math.max(chipRadius * 1.7, labelHeight * 0.56 + 3.2);
+          const labelMinY = innerTop + labelHeight * 0.56;
+          const labelMaxY = innerBottom - labelHeight * 0.4;
+          const preferredAboveY = chipY - labelClearance + (tuning.labelDy ?? 0);
+          const preferredBelowY = chipY + labelClearance + (tuning.labelDy ?? 0);
+          const labelY = preferredAboveY < labelMinY
+            ? clampInRange(preferredBelowY, labelMinY, labelMaxY)
+            : clampInRange(preferredAboveY, labelMinY, labelMaxY);
+
+          nextOverlays.push({
+            id: territory.id,
+            centerX: chipX,
+            centerY,
+            textLines,
+            chipY,
+            chipRadius,
+            labelX,
+            labelY,
+            labelFontSize,
+            labelWidth,
+            labelHeight,
+            text
+          });
+        } catch {
+          // ignore malformed asset
+        }
+      }
+
+      if (!active) {
+        return;
+      }
+      territoryMasksRef.current = nextMasks;
+      setRegionOverlays(nextOverlays);
+      setMapBoardImageUrl(boardCanvas.toDataURL("image/png"));
+
+      const borderCanvas = document.createElement("canvas");
+      borderCanvas.width = mapWidth * renderScale;
+      borderCanvas.height = mapHeight * renderScale;
+      const borderCtx = borderCanvas.getContext("2d");
+      if (borderCtx) {
+        borderCtx.setTransform(1, 0, 0, 1, 0, 0);
+        borderCtx.clearRect(0, 0, borderCanvas.width, borderCanvas.height);
+        borderCtx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+        const drawBorderLayer = (radius: number, step: number, color: string) => {
+          borderCtx.fillStyle = color;
+          borderCtx.beginPath();
+          for (const mask of Object.values(nextMasks)) {
+            for (let i = 0; i < mask.borderPoints.length; i += step) {
+              const packed = mask.borderPoints[i];
+              const localX = packed & 0xffff;
+              const localY = packed >>> 16;
+              const x = mask.minX + localX + 0.5;
+              const y = mask.minY + localY + 0.5;
+              borderCtx.moveTo(x + radius, y);
+              borderCtx.arc(x, y, radius, 0, Math.PI * 2);
+            }
+          }
+          borderCtx.fill();
+        };
+        drawBorderLayer(1.06, 1, "rgba(88, 80, 60, 0.72)");
+        drawBorderLayer(0.64, 1, "rgba(246, 236, 206, 0.9)");
+        setMapBordersOverlayUrl(borderCanvas.toDataURL("image/png"));
+      }
+    };
+
+    void buildMasks();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const [captureMoveReady, setCaptureMoveReady] = useState(false);
   const [mapScale, setMapScale] = useState(1);
   const [mapMinScale, setMapMinScale] = useState(1);
@@ -592,6 +953,9 @@ function App() {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [regionOverlays, setRegionOverlays] = useState<TerritoryOverlay[]>([]);
   const [mapViewBox, setMapViewBox] = useState("0 0 1000 700");
+  const [mapPixelSize, setMapPixelSize] = useState({ width: 1000, height: 700 });
+  const [mapRenderScale, setMapRenderScale] = useState(1);
+  const [selectionAnimTick, setSelectionAnimTick] = useState(0);
   const [hoverTerritoryId, setHoverTerritoryId] = useState("");
 
   const [reinforceTerritoryId, setReinforceTerritoryId] = useState("");
@@ -604,6 +968,168 @@ function App() {
   const [selectedTradeCardIds, setSelectedTradeCardIds] = useState<string[]>([]);
 
   const currentPhase = parsePhase(state?.phase);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSelectionAnimTick(value => (value + 1) % 10000);
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const masks = territoryMasksRef.current;
+    if (!state || !Object.keys(masks).length || mapPixelSize.width <= 0 || mapPixelSize.height <= 0) {
+      setMapSelectionOverlayUrl("");
+      return;
+    }
+
+    const overlayCanvas = document.createElement("canvas");
+    overlayCanvas.width = mapPixelSize.width * mapRenderScale;
+    overlayCanvas.height = mapPixelSize.height * mapRenderScale;
+    const overlayCtx = overlayCanvas.getContext("2d");
+    if (!overlayCtx) {
+      setMapSelectionOverlayUrl("");
+      return;
+    }
+    overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    overlayCtx.setTransform(mapRenderScale, 0, 0, mapRenderScale, 0, 0);
+
+    const drawOutline = (
+      mask: TerritoryMask,
+      baseColor: { r: number; g: number; b: number; a: number },
+      dashColor: { r: number; g: number; b: number; a: number },
+      options: {
+        baseRadius: number;
+        baseStep: number;
+        dashRadius: number;
+        dashStep: number;
+        dashPeriod: number;
+        dashOn: number;
+        phaseSpeed: number;
+      }
+    ) => {
+      overlayCtx.fillStyle = `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, ${baseColor.a})`;
+      overlayCtx.beginPath();
+      for (let i = 0; i < mask.borderPoints.length; i += Math.max(1, options.baseStep)) {
+        const packed = mask.borderPoints[i];
+        const localX = packed & 0xffff;
+        const localY = packed >>> 16;
+        const x = mask.minX + localX + 0.5;
+        const y = mask.minY + localY + 0.5;
+        overlayCtx.moveTo(x + options.baseRadius, y);
+        overlayCtx.arc(x, y, options.baseRadius, 0, Math.PI * 2);
+      }
+      overlayCtx.fill();
+
+      const dashPeriod = Math.max(2, options.dashPeriod);
+      const dashOn = Math.max(1, Math.min(dashPeriod - 1, options.dashOn));
+      const phaseShift = Math.floor(selectionAnimTick * options.phaseSpeed);
+      overlayCtx.fillStyle = `rgba(${dashColor.r}, ${dashColor.g}, ${dashColor.b}, ${dashColor.a})`;
+      overlayCtx.beginPath();
+      for (let i = 0; i < mask.borderPoints.length; i += Math.max(1, options.dashStep)) {
+        const packed = mask.borderPoints[i];
+        const localX = packed & 0xffff;
+        const localY = packed >>> 16;
+        const xRaw = mask.minX + localX;
+        const yRaw = mask.minY + localY;
+        const angle = Math.atan2(yRaw - mask.centerY, xRaw - mask.centerX);
+        const around = Math.floor(((angle + Math.PI) / (Math.PI * 2)) * 360);
+        if (((around + phaseShift) % dashPeriod) >= dashOn) {
+          continue;
+        }
+        const x = xRaw + 0.5;
+        const y = yRaw + 0.5;
+        overlayCtx.moveTo(x + options.dashRadius, y);
+        overlayCtx.arc(x, y, options.dashRadius, 0, Math.PI * 2);
+      }
+      overlayCtx.fill();
+    };
+
+    const drawById = (
+      territoryId: string,
+      baseColor: { r: number; g: number; b: number; a: number },
+      dashColor: { r: number; g: number; b: number; a: number },
+      options: {
+        baseRadius: number;
+        baseStep: number;
+        dashRadius: number;
+        dashStep: number;
+        dashPeriod: number;
+        dashOn: number;
+        phaseSpeed: number;
+      }
+    ) => {
+      const mask = masks[territoryId];
+      if (!mask) {
+        return;
+      }
+      drawOutline(mask, baseColor, dashColor, options);
+    };
+
+    if (currentPhase === "setup" || currentPhase === "reinforcement") {
+      if (reinforceTerritoryId) {
+        drawById(
+          reinforceTerritoryId,
+          { r: 124, g: 136, b: 148, a: 0.56 },
+          { r: 242, g: 248, b: 255, a: 0.92 },
+          { baseRadius: 0.45, baseStep: 2, dashRadius: 0.74, dashStep: 2, dashPeriod: 28, dashOn: 10, phaseSpeed: 0.45 }
+        );
+      }
+    }
+    if (currentPhase === "attack") {
+      if (attackFromId) {
+        drawById(
+          attackFromId,
+          { r: 136, g: 54, b: 54, a: 0.58 },
+          { r: 255, g: 104, b: 96, a: 0.95 },
+          { baseRadius: 0.48, baseStep: 2, dashRadius: 0.8, dashStep: 2, dashPeriod: 26, dashOn: 10, phaseSpeed: 0.5 }
+        );
+      }
+      if (attackToId) {
+        drawById(
+          attackToId,
+          { r: 145, g: 62, b: 62, a: 0.62 },
+          { r: 255, g: 84, b: 84, a: 0.98 },
+          { baseRadius: 0.52, baseStep: 2, dashRadius: 0.86, dashStep: 2, dashPeriod: 24, dashOn: 10, phaseSpeed: 0.6 }
+        );
+      }
+    }
+    if (currentPhase === "fortify") {
+      if (fortifyFromId) {
+        drawById(
+          fortifyFromId,
+          { r: 122, g: 145, b: 161, a: 0.58 },
+          { r: 234, g: 244, b: 252, a: 0.94 },
+          { baseRadius: 0.45, baseStep: 2, dashRadius: 0.74, dashStep: 2, dashPeriod: 28, dashOn: 10, phaseSpeed: 0.45 }
+        );
+      }
+      if (fortifyToId) {
+        drawById(
+          fortifyToId,
+          { r: 122, g: 145, b: 161, a: 0.58 },
+          { r: 234, g: 244, b: 252, a: 0.94 },
+          { baseRadius: 0.45, baseStep: 2, dashRadius: 0.74, dashStep: 2, dashPeriod: 28, dashOn: 10, phaseSpeed: 0.45 }
+        );
+      }
+    }
+
+    setMapSelectionOverlayUrl(overlayCanvas.toDataURL("image/png"));
+  }, [
+    state,
+    playerId,
+    currentPhase,
+    reinforceTerritoryId,
+    attackFromId,
+    attackToId,
+    fortifyFromId,
+    fortifyToId,
+    selectionAnimTick,
+    mapRenderScale,
+    mapPixelSize.width,
+    mapPixelSize.height
+  ]);
+
   const myObjective = state?.objectivesByPlayerId?.[playerId];
   const territoryList = Object.values(state?.territories ?? {});
   const ownedTerritories = territoryList.filter(territory => territory.ownerPlayerId === playerId);
@@ -742,9 +1268,8 @@ function App() {
   }, []);
 
   const schedulePanOffset = useCallback((x: number, y: number) => {
-    const baseMapWidth = mapRef.current?.clientWidth
-      ?? Math.min((mapViewportRef.current?.clientWidth ?? window.innerWidth) * 0.92, 1480);
-    const mapWorldWidth = baseMapWidth * Math.max(0.1, mapScale);
+    const mapWorldWidth = mapImageRef.current?.clientWidth
+      ?? (Math.min((mapViewportRef.current?.clientWidth ?? window.innerWidth) * 0.92, MAX_MAP_DISPLAY_WIDTH) * Math.max(0.1, mapScale));
     pendingPanOffsetRef.current = {
       x: Math.round(normalizeLoopedOffsetX(x, mapWorldWidth)),
       y: Math.round(y)
@@ -1059,6 +1584,57 @@ function App() {
       setFortifyToId("");
     }
   }, [currentPhase]);
+
+  const handleMapSurfaceClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (panMovedRef.current) {
+      panMovedRef.current = false;
+      return;
+    }
+    const image = mapImageRef.current;
+    if (!image) {
+      clearMapSelections();
+      return;
+    }
+    const rect = image.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      clearMapSelections();
+      return;
+    }
+    const localX = ((event.clientX - rect.left) / rect.width) * mapPixelSize.width;
+    const localY = ((event.clientY - rect.top) / rect.height) * mapPixelSize.height;
+    if (localX < 0 || localY < 0 || localX >= mapPixelSize.width || localY >= mapPixelSize.height) {
+      clearMapSelections();
+      return;
+    }
+
+    let selectedId = "";
+    let smallestArea = Number.POSITIVE_INFINITY;
+    for (const territory of worldClassic.map.territories) {
+      const mask = territoryMasksRef.current[territory.id];
+      if (!mask) {
+        continue;
+      }
+      const x = Math.floor(localX);
+      const y = Math.floor(localY);
+      if (x < mask.minX || y < mask.minY || x >= mask.minX + mask.width || y >= mask.minY + mask.height) {
+        continue;
+      }
+      const alpha = mask.alpha[(y - mask.minY) * mask.width + (x - mask.minX)];
+      if (alpha <= 10) {
+        continue;
+      }
+      if (mask.area < smallestArea) {
+        smallestArea = mask.area;
+        selectedId = territory.id;
+      }
+    }
+
+    if (!selectedId) {
+      clearMapSelections();
+      return;
+    }
+    handleTerritoryClick(selectedId);
+  }, [clearMapSelections, handleTerritoryClick, mapPixelSize.height, mapPixelSize.width]);
 
   useEffect(() => {
     const timer = setTimeout(() => setScreen("portal"), 900);
@@ -1451,248 +2027,22 @@ function App() {
       return;
     }
 
-    const svg = mapRef.current?.querySelector("svg") as SVGSVGElement | null;
-    if (!svg) {
-      return;
-    }
-
-    const points: Array<{
-      id: string;
-      centerX: number;
-      centerY: number;
-      text: string;
-      textLines: string[];
-      chipRadius: number;
-      labelFontSize: number;
-      labelWidth: number;
-      labelHeight: number;
-    }> = [];
-    let minX = Number.POSITIVE_INFINITY;
-    let minY = Number.POSITIVE_INFINITY;
-    let maxX = Number.NEGATIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-    const nextOverlays: TerritoryOverlay[] = [];
-
-    for (const territory of worldClassic.map.territories) {
-      const node = svg.querySelector(`#${CSS.escape(territory.id)}`) as SVGGraphicsElement | null;
-      if (!node || typeof node.getBBox !== "function") {
-        continue;
-      }
-
-      try {
-        const box = node.getBBox();
-        if (box.width <= 0 || box.height <= 0) {
-          continue;
-        }
-
-        const ctm = node.getCTM();
-        if (!ctm) {
-          continue;
-        }
-
-        const centerPoint = svg.createSVGPoint();
-        centerPoint.x = box.x + box.width / 2;
-        centerPoint.y = box.y + box.height / 2;
-        const transformedCenter = centerPoint.matrixTransform(ctm);
-
-        const corners = [
-          { x: box.x, y: box.y },
-          { x: box.x + box.width, y: box.y },
-          { x: box.x, y: box.y + box.height },
-          { x: box.x + box.width, y: box.y + box.height }
-        ].map(corner => {
-          const point = svg.createSVGPoint();
-          point.x = corner.x;
-          point.y = corner.y;
-          return point.matrixTransform(ctm);
-        });
-
-        for (const corner of corners) {
-          minX = Math.min(minX, corner.x);
-          minY = Math.min(minY, corner.y);
-          maxX = Math.max(maxX, corner.x);
-          maxY = Math.max(maxY, corner.y);
-        }
-
-        const boundsWidth = Math.max(...corners.map(corner => corner.x)) - Math.min(...corners.map(corner => corner.x));
-        const boundsHeight = Math.max(...corners.map(corner => corner.y)) - Math.min(...corners.map(corner => corner.y));
-        const territorySpan = Math.max(8, Math.min(boundsWidth, boundsHeight));
-        const text = labelForTerritory(territory.id);
-        const textLines = splitTerritoryLabel(text);
-        const longestLineLength = Math.max(...textLines.map(line => line.length));
-        const tuning = TERRITORY_OVERLAY_TUNING[territory.id] ?? {};
-        const chipRadius = clamp(territorySpan * 0.14, 5.5, 10.5);
-        const widthLimited = (boundsWidth * 0.7) / Math.max(4, longestLineLength * 0.6);
-        const lineCount = textLines.length;
-        const heightLimited = (boundsHeight * 0.27) / Math.max(1, lineCount);
-        const tunedBase = Math.min(widthLimited, heightLimited) * (tuning.fontScale ?? 1);
-        const labelFontSize = clamp(tunedBase, 4.4, 7);
-        const labelWidth = Math.max(34, longestLineLength * labelFontSize * 0.56);
-        const labelHeight = Math.max(10, labelFontSize * 1.14 * lineCount);
-
-        points.push({
-          id: territory.id,
-          centerX: transformedCenter.x,
-          centerY: transformedCenter.y,
-          text,
-          textLines,
-          chipRadius,
-          labelFontSize,
-          labelWidth,
-          labelHeight
-        });
-      } catch {
-        // ignore malformed region geometry
-      }
-    }
-
-    if (points.length > 0 && Number.isFinite(minX) && Number.isFinite(minY) && Number.isFinite(maxX) && Number.isFinite(maxY)) {
-      const padding = 24;
-      const width = Math.max(1, maxX - minX);
-      const height = Math.max(1, maxY - minY);
-      const normalizedViewBox = `${minX - padding} ${minY - padding} ${width + padding * 2} ${height + padding * 2}`;
-      svg.setAttribute("viewBox", normalizedViewBox);
-      setMapViewBox(normalizedViewBox);
-    } else {
-      const fallback = svg.getAttribute("viewBox");
-      if (fallback) {
-        setMapViewBox(fallback);
-      }
-    }
-
-    for (const point of points) {
-      const tuning = TERRITORY_OVERLAY_TUNING[point.id] ?? {};
-      const labelOffset = Math.max(point.chipRadius * 2.05, point.labelHeight * 1.08 + 7);
-      const labelX = point.centerX + (tuning.labelDx ?? 0);
-      const labelY = point.centerY - labelOffset + (tuning.labelDy ?? 0);
-      const chipY = point.centerY + Math.max(point.chipRadius * 1.45, point.labelHeight * 0.56 + 6) + (tuning.chipDy ?? 0);
-      const centerX = point.centerX + (tuning.chipDx ?? 0);
-
-      nextOverlays.push({
-        id: point.id,
-        centerX,
-        centerY: point.centerY,
-        textLines: point.textLines,
-        chipY,
-        chipRadius: point.chipRadius,
-        labelX,
-        labelY,
-        labelFontSize: point.labelFontSize,
-        labelWidth: point.labelWidth,
-        labelHeight: point.labelHeight,
-        text: point.text
-      });
-    }
-
-    setRegionOverlays(nextOverlays);
-  }, [screen]);
-
-  useEffect(() => {
-    if (screen !== "game") {
-      return;
-    }
-    const svg = mapRef.current?.querySelector("svg") as SVGSVGElement | null;
-    if (!svg) {
-      return;
-    }
-
-    const cleanups: Array<() => void> = [];
-    for (const territory of worldClassic.map.territories) {
-      const node = svg.querySelector(`#${CSS.escape(territory.id)}`) as SVGElement | null;
-      if (!node) {
-        continue;
-      }
-      node.classList.add("territory-region");
-      node.setAttribute("data-territory-id", territory.id);
-      const onClick = (event: Event) => {
-        event.stopPropagation();
-        handleTerritoryClick(territory.id);
-      };
-      const onMouseEnter = () => setHoverTerritoryId(territory.id);
-      const onMouseLeave = () => setHoverTerritoryId(current => (current === territory.id ? "" : current));
-      node.addEventListener("click", onClick);
-      node.addEventListener("mouseenter", onMouseEnter);
-      node.addEventListener("mouseleave", onMouseLeave);
-      cleanups.push(() => {
-        node.removeEventListener("click", onClick);
-        node.removeEventListener("mouseenter", onMouseEnter);
-        node.removeEventListener("mouseleave", onMouseLeave);
-      });
-    }
-
-    return () => {
-      cleanups.forEach(cleanup => cleanup());
-    };
-  }, [handleTerritoryClick, screen]);
-
-  useEffect(() => {
-    if (screen !== "game" || !state) {
-      return;
-    }
-    const svg = mapRef.current?.querySelector("svg") as SVGSVGElement | null;
-    if (!svg) {
-      return;
-    }
-
-    for (const territory of worldClassic.map.territories) {
-      const node = svg.querySelector(`#${CSS.escape(territory.id)}`) as SVGElement | null;
-      if (!node) {
-        continue;
-      }
-      const territoryState = state.territories[territory.id];
-      const ownerColor = territoryState ? (playerColorById[territoryState.ownerPlayerId] ?? "#8ca0b2") : "#8ca0b2";
-      node.style.setProperty("--owner-color", ownerColor);
-      node.classList.toggle("territory-owned", !!territoryState);
-      node.classList.toggle("territory-owned-self", territoryState?.ownerPlayerId === playerId);
-      node.classList.toggle("territory-setup-owned", currentPhase === "setup" && territoryState?.ownerPlayerId === playerId);
-      node.classList.toggle(
-        "territory-selected-reinforce",
-        (currentPhase === "setup" || currentPhase === "reinforcement") && territory.id === reinforceTerritoryId
-      );
-      node.classList.toggle("territory-attack-source", currentPhase === "attack" && isMyTurn && attackSourceIdSet.has(territory.id));
-      node.classList.toggle("territory-selected-source", currentPhase === "attack" && territory.id === attackFromId);
-      node.classList.toggle("territory-selected-target", currentPhase === "attack" && territory.id === attackToId);
-      node.classList.toggle("territory-attack-target", currentPhase === "attack" && possibleAttackTargetIds.has(territory.id));
-      node.classList.toggle("territory-selected-fortify-source", currentPhase === "fortify" && territory.id === fortifyFromId);
-      node.classList.toggle("territory-selected-fortify-target", currentPhase === "fortify" && territory.id === fortifyToId);
-    }
-  }, [
-    attackFromId,
-    attackSourceIdSet,
-    attackToId,
-    currentPhase,
-    fortifyFromId,
-    fortifyToId,
-    isMyTurn,
-    playerColorById,
-    playerId,
-    possibleAttackTargetIds,
-    reinforceTerritoryId,
-    screen,
-    state
-  ]);
-
-  useEffect(() => {
-    if (screen !== "game") {
-      return;
-    }
-
     const computeMinScale = () => {
       const viewport = mapViewportRef.current;
-      const svg = mapRef.current?.querySelector("svg") as SVGSVGElement | null;
-      if (!viewport || !svg) {
+      const image = mapImageRef.current;
+      if (!viewport || !image) {
         return;
       }
 
       const viewportRect = viewport.getBoundingClientRect();
-      const svgRect = svg.getBoundingClientRect();
-      if (viewportRect.width <= 0 || viewportRect.height <= 0 || svgRect.width <= 0 || svgRect.height <= 0) {
+      const imageRect = image.getBoundingClientRect();
+      if (viewportRect.width <= 0 || viewportRect.height <= 0 || imageRect.width <= 0 || imageRect.height <= 0) {
         return;
       }
 
       const safeScale = Math.max(0.001, mapScale);
-      const baseWidth = svgRect.width / safeScale;
-      const baseHeight = svgRect.height / safeScale;
+      const baseWidth = imageRect.width / safeScale;
+      const baseHeight = imageRect.height / safeScale;
       if (baseWidth <= 0 || baseHeight <= 0) {
         return;
       }
@@ -1889,7 +2239,8 @@ function App() {
         return currentScale;
       }
 
-      const baseMapWidth = mapRef.current?.clientWidth ?? Math.min(rect.width * 0.92, 1480);
+      const currentWorldWidth = mapImageRef.current?.clientWidth ?? (Math.min(rect.width * 0.92, MAX_MAP_DISPLAY_WIDTH) * Math.max(0.1, currentScale));
+      const baseMapWidth = currentWorldWidth / Math.max(0.1, currentScale);
       const mapWorldWidth = baseMapWidth * Math.max(0.1, nextScale);
 
       setMapOffset(currentOffset => {
@@ -1908,9 +2259,8 @@ function App() {
   };
 
   useEffect(() => {
-    const baseMapWidth = mapRef.current?.clientWidth
-      ?? Math.min((mapViewportRef.current?.clientWidth ?? window.innerWidth) * 0.92, 1480);
-    const mapWorldWidth = baseMapWidth * Math.max(0.1, mapScale);
+    const mapWorldWidth = mapImageRef.current?.clientWidth
+      ?? (Math.min((mapViewportRef.current?.clientWidth ?? window.innerWidth) * 0.92, MAX_MAP_DISPLAY_WIDTH) * Math.max(0.1, mapScale));
     setMapOffset(current => ({
       x: normalizeLoopedOffsetX(current.x, mapWorldWidth),
       y: current.y
@@ -1941,8 +2291,9 @@ function App() {
   );
 
   const renderTerritoryCard = (territoryId: string) => {
-    const svg = svgForTerritoryCard(territoryId);
-    if (!svg) {
+    const templateUrl = templateForTerritoryCard(territoryId);
+    const pngUrl = territoryCardImageById[territoryId] ?? pngForTerritoryCard(territoryId);
+    if (!templateUrl && !pngUrl) {
       return (
         <div className="hand-card">
           <span className="hand-card-short">{labelForTerritory(territoryId).slice(0, 3).toUpperCase()}</span>
@@ -1950,7 +2301,16 @@ function App() {
         </div>
       );
     }
-    return <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: svg }} />;
+    return (
+      <div className="territory-svg-card">
+        {templateUrl ? <img src={templateUrl} alt={labelForTerritory(territoryId)} className="territory-card-template" draggable={false} /> : null}
+        {pngUrl ? (
+          <div className="territory-card-territory-window" aria-hidden>
+            <img src={pngUrl} alt="" className="territory-card-territory-image" draggable={false} />
+          </div>
+        ) : null}
+      </div>
+    );
   };
 
   const renderFlipCard = (front: JSX.Element, back: JSX.Element, className = "", animationDelayMs = 0) => {
@@ -2122,11 +2482,15 @@ function App() {
           }}
           onMouseDown={event => {
             setIsPanning(true);
+            panMovedRef.current = false;
             setPanStart({ x: event.clientX - mapOffset.x, y: event.clientY - mapOffset.y });
           }}
           onMouseMove={event => {
             if (!isPanning) {
               return;
+            }
+            if (Math.abs(event.clientX - (panStart.x + mapOffset.x)) > 2 || Math.abs(event.clientY - (panStart.y + mapOffset.y)) > 2) {
+              panMovedRef.current = true;
             }
             schedulePanOffset(event.clientX - panStart.x, event.clientY - panStart.y);
           }}
@@ -2154,19 +2518,32 @@ function App() {
               panRafRef.current = null;
             }
           }}
-          onClick={event => {
-            const target = event.target as Element | null;
-            if (target?.closest("[data-territory-id]")) {
-              return;
-            }
-            clearMapSelections();
-          }}
+          onClick={handleMapSurfaceClick}
         >
           <div
             className="arena-map-stage"
-            style={{ transform: `translate(calc(-50% + ${mapOffset.x}px), calc(-50% + ${mapOffset.y}px)) scale(${mapScale})` }}
+            style={{
+              transform: `translate(calc(-50% + ${mapOffset.x}px), calc(-50% + ${mapOffset.y}px))`,
+              ["--map-scale" as string]: mapScale
+            }}
           >
-            <div ref={mapRef} className="map-canvas arena-map" dangerouslySetInnerHTML={{ __html: worldClassic.svg }} />
+            <img ref={mapImageRef} src={mapBoardImageUrl} alt="Mappa Risiko" className="arena-map-board-image" draggable={false} />
+            {mapBordersOverlayUrl ? (
+              <img
+                src={mapBordersOverlayUrl}
+                alt=""
+                className="arena-map-board-image map-borders-overlay-image"
+                draggable={false}
+              />
+            ) : null}
+            {mapSelectionOverlayUrl ? (
+              <img
+                src={mapSelectionOverlayUrl}
+                alt=""
+                className="arena-map-board-image map-selection-overlay-image"
+                draggable={false}
+              />
+            ) : null}
             <svg className="map-attack-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
               {attackPreviewLines.map(line => (
                 <line
@@ -2199,23 +2576,26 @@ function App() {
                 const ownerColor = playerColorById[territory.ownerPlayerId] ?? "#7f92a5";
                 const ownerIndex = state?.players.findIndex(player => player.playerId === territory.ownerPlayerId) ?? -1;
                 const tankAsset = ownerIndex >= 0 ? PLAYER_TANK_ASSETS[ownerIndex % PLAYER_TANK_ASSETS.length] : null;
+                const counterRadius = Math.max(3.2, overlay.chipRadius * 0.42);
                 return (
                   <g key={`owner-${overlay.id}-${territory.armies}-${territory.ownerPlayerId}`} className="map-owner-chip" transform={`translate(${overlay.centerX} ${overlay.chipY})`}>
+                    <circle cx="0" cy="0" r={overlay.chipRadius} fill={ownerColor} />
                     {tankAsset ? (
                       <image
                         href={tankAsset}
-                        x={-overlay.chipRadius * 0.9}
-                        y={-overlay.chipRadius * 0.62}
-                        width={overlay.chipRadius * 1.35}
-                        height={overlay.chipRadius * 1.35}
+                        x={-overlay.chipRadius * 0.86}
+                        y={-overlay.chipRadius * 0.84}
+                        width={overlay.chipRadius * 1.72}
+                        height={overlay.chipRadius * 1.72}
                         preserveAspectRatio="xMidYMid meet"
                       />
-                    ) : (
-                      <circle cx="0" cy="0" r={overlay.chipRadius} fill={ownerColor} />
-                    )}
-                    <text x={overlay.chipRadius * 1.02} y={0} style={{ fontSize: `${Math.max(8, overlay.chipRadius * 0.9)}px` }}>
-                      {territory.armies}
-                    </text>
+                    ) : null}
+                    <g className="map-owner-count" transform={`translate(${overlay.chipRadius * 0.56} ${-overlay.chipRadius * 0.54})`}>
+                      <circle r={counterRadius} />
+                      <text y={counterRadius * 0.03} style={{ fontSize: `${Math.max(6, overlay.chipRadius * 0.78)}px` }}>
+                        {territory.armies}
+                      </text>
+                    </g>
                   </g>
                 );
               })}
@@ -2241,9 +2621,9 @@ function App() {
                   if (!territory || territory.ownerPlayerId !== playerId) {
                     return null;
                   }
-                  const controlOffsetX = Math.max(8.5, overlay.chipRadius + 5.5);
+                  const buttonRadius = Math.max(2.8, overlay.chipRadius * 0.26);
+                  const controlOffsetX = overlay.chipRadius + buttonRadius + Math.max(1.2, overlay.chipRadius * 0.1);
                   const controlY = overlay.chipY;
-                  const buttonRadius = Math.max(3.5, overlay.chipRadius * 0.32);
                   const canAdd = canPlaceFromMap && (state?.reinforcementsAvailable ?? 0) > 0;
                   return (
                     <g key={`reinforce-${overlay.id}`} className="reinforce-controls">
@@ -2709,9 +3089,9 @@ function App() {
                           } as CSSProperties
                         }
                       >
-                        {svgForTerritoryCard(id)
+                        {(territoryCardImageById[id] ?? pngForTerritoryCard(id))
                           ? renderFlipCard(
-                              <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: svgForTerritoryCard(id)! }} />,
+                              renderTerritoryCard(id),
                               <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: territoryCardBackRaw }} />,
                               flipClass,
                               isNewestFlipping ? 20 : 0

@@ -1,20 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
-  territoryIdsFromSvg,
   validateWorldClassicBinding,
   worldClassic
 } from "./worldClassic";
 
 describe("world-classic pack binding", () => {
-  it("maps all map.json territory IDs to SVG territory groups", () => {
-    const svgIds = territoryIdsFromSvg(worldClassic.svg);
+  it("has all territory IDs bound in map.json", () => {
     const mapIds = worldClassic.map.territories.map(territory => territory.id);
-
-    expect(svgIds.length).toBe(mapIds.length);
-    expect(new Set(svgIds)).toEqual(new Set(mapIds));
+    expect(mapIds.length).toBe(42);
+    expect(new Set(mapIds).size).toBe(42);
   });
 
-  it("has no binding errors across svg/map/i18n", () => {
+  it("has no binding errors across map/i18n", () => {
     expect(validateWorldClassicBinding()).toEqual([]);
   });
 });

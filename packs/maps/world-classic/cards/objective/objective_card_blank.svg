@@ -42,7 +42,7 @@
   <g clip-path="url(#clip)">
     <rect x="22" y="130" width="456" height="470" fill="url(#camo)"/>
     <rect x="22" y="130" width="456" height="470" fill="url(#diag)"/>
-    <image x="-112" y="128" width="724" height="520" href="/packs/maps/world-classic/Risk_board.svg" preserveAspectRatio="xMidYMid meet" opacity="0.2"/>
+    <image x="-112" y="128" width="724" height="520" href="/packs/territories-png/world map.png" preserveAspectRatio="xMidYMid meet" opacity="0.2"/>
     <rect x="22" y="130" width="456" height="470" fill="url(#overlay)"/>
   </g>
 
@@ -65,3 +65,4 @@
 
   <text x="250" y="656" text-anchor="middle" dominant-baseline="middle" font-size="24" fill="#2d2d2d" font-family="Trebuchet MS, Arial, sans-serif" font-weight="700">RisiKo!</text>
 </svg>
+

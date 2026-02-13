@@ -572,12 +572,43 @@ button:disabled {
 }
 
 .territory-svg-card {
+  position: relative;
   width: 100%;
   height: 100%;
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
   background: #fff;
+}
+
+.territory-card-template {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.territory-card-territory-window {
+  position: absolute;
+  left: 4.4%;
+  top: 18.6%;
+  width: 91.2%;
+  height: 65.7%;
+  border-radius: 4.8%;
+  display: grid;
+  place-items: center;
+  background: rgba(243, 244, 238, 0.9);
+  border: 1px solid rgba(230, 212, 176, 0.74);
+  box-shadow: inset 0 0 0 1px rgba(255, 252, 242, 0.5);
+  overflow: hidden;
+}
+
+.territory-card-territory-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center center;
+  image-rendering: auto;
 }
 
 .territory-svg-card svg {
@@ -1090,13 +1121,40 @@ button:disabled {
 }
 
 .arena-map-stage {
+  --map-scale: 1;
   position: absolute;
   left: 50%;
   top: 50%;
   transform-origin: center center;
-  will-change: auto;
+  will-change: transform;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+}
+
+.arena-map-board-image {
+  display: block;
+  width: calc(min(92vw, 1480px) * var(--map-scale));
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  image-rendering: auto;
+  -webkit-image-rendering: -webkit-optimize-contrast;
+}
+
+.map-borders-overlay-image {
+  position: absolute;
+  inset: 0;
+  opacity: 0.94;
+  filter: drop-shadow(0 0 0.7px rgba(252, 244, 220, 0.22));
+  pointer-events: none;
+}
+
+.map-selection-overlay-image {
+  position: absolute;
+  inset: 0;
+  opacity: 1;
+  pointer-events: none;
 }
 
 .arena-map {
@@ -1109,18 +1167,17 @@ button:disabled {
 
 .arena-map svg {
   display: block;
-  width: min(92vw, 1480px);
+  width: calc(min(92vw, 1480px) * var(--map-scale));
   height: auto;
   shape-rendering: geometricPrecision;
   text-rendering: geometricPrecision;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
+  image-rendering: auto;
 }
 
 .map-label-overlay {
   position: absolute;
   inset: 0;
-  width: min(92vw, 1480px);
+  width: calc(min(92vw, 1480px) * var(--map-scale));
   height: auto;
   pointer-events: none;
 }
@@ -1128,7 +1185,7 @@ button:disabled {
 .map-owner-overlay {
   position: absolute;
   inset: 0;
-  width: min(92vw, 1480px);
+  width: calc(min(92vw, 1480px) * var(--map-scale));
   height: auto;
   pointer-events: none;
 }
@@ -1136,7 +1193,7 @@ button:disabled {
 .map-attack-overlay {
   position: absolute;
   inset: 0;
-  width: min(92vw, 1480px);
+  width: calc(min(92vw, 1480px) * var(--map-scale));
   height: auto;
   pointer-events: none;
 }
@@ -1144,7 +1201,7 @@ button:disabled {
 .map-reinforce-overlay {
   position: absolute;
   inset: 0;
-  width: min(92vw, 1480px);
+  width: calc(min(92vw, 1480px) * var(--map-scale));
   height: auto;
   pointer-events: none;
 }
@@ -1169,7 +1226,7 @@ button:disabled {
 .map-selection-overlay {
   position: absolute;
   inset: 0;
-  width: min(92vw, 1480px);
+  width: calc(min(92vw, 1480px) * var(--map-scale));
   height: auto;
   pointer-events: none;
 }
@@ -1233,7 +1290,7 @@ button:disabled {
   text-anchor: middle;
   dominant-baseline: middle;
   font-family: "Trebuchet MS", "Segoe UI", sans-serif;
-  font-size: 7px;
+  font-size: 6px;
   font-weight: 800;
   fill: #243340;
   stroke: none;
@@ -1248,18 +1305,25 @@ button:disabled {
 .map-owner-chip text {
   fill: #ffffff;
   stroke: rgba(8, 14, 22, 0.94);
-  stroke-width: 1.3px;
+  stroke-width: 0.9px;
   paint-order: stroke;
-  text-anchor: start;
+  text-anchor: middle;
   dominant-baseline: middle;
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 900;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
-.map-owner-chip circle {
+.map-owner-count circle {
+  fill: rgba(11, 20, 30, 0.94);
+  stroke: rgba(236, 245, 252, 0.9);
+  stroke-width: 0.9px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.42));
+}
+
+.map-owner-chip > circle {
   stroke: rgba(234, 242, 249, 0.95);
-  stroke-width: 1.4px;
+  stroke-width: 1.1px;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.48));
 }
 
@@ -1269,8 +1333,8 @@ button:disabled {
 
 .map-label-overlay text {
   fill: #f5efe0;
-  stroke: rgba(14, 21, 30, 0.95);
-  stroke-width: 1.7px;
+  stroke: rgba(14, 21, 30, 0.9);
+  stroke-width: 1.25px;
   paint-order: stroke;
   text-anchor: middle;
   dominant-baseline: middle;
@@ -1279,79 +1343,7 @@ button:disabled {
   font-weight: 800;
   letter-spacing: 0.018em;
   text-transform: capitalize;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
-}
-
-.arena-map svg .territory-region {
-  cursor: pointer;
-  transition: fill 130ms ease, stroke 130ms ease, filter 130ms ease;
-}
-
-.arena-map svg .territory-owned {
-  fill: color-mix(in srgb, var(--owner-color, #8ca0b2) 68%, #ffffff 32%) !important;
-  stroke: rgba(18, 29, 40, 0.72) !important;
-  stroke-width: 1.35 !important;
-}
-
-.arena-map svg .territory-owned-self {
-  stroke: #edf3f8 !important;
-  stroke-width: 2.05 !important;
-  filter: drop-shadow(0 0 5px rgba(244, 252, 255, 0.48));
-}
-
-.arena-map svg .territory-setup-owned {
-  stroke: #ffe176 !important;
-  stroke-width: 3.2 !important;
-  stroke-dasharray: 6 4 !important;
-  filter:
-    drop-shadow(0 0 11px rgba(255, 216, 95, 0.75))
-    drop-shadow(0 0 3px rgba(25, 20, 6, 0.6));
-}
-
-.arena-map svg .territory-selected-reinforce {
-  fill: color-mix(in srgb, var(--owner-color, #8ca0b2) 72%, #fff4b8 28%) !important;
-  stroke: #ffe176 !important;
-  stroke-width: 4 !important;
-  filter:
-    drop-shadow(0 0 13px rgba(255, 216, 95, 0.86))
-    drop-shadow(0 0 3px rgba(25, 20, 6, 0.62));
-}
-
-.arena-map svg .territory-attack-source,
-.arena-map svg .territory-selected-source {
-  stroke: #ffe176 !important;
-  stroke-width: 3.5 !important;
-  filter:
-    drop-shadow(0 0 11px rgba(255, 216, 95, 0.8))
-    drop-shadow(0 0 3px rgba(25, 20, 6, 0.6));
-}
-
-.arena-map svg .territory-attack-target,
-.arena-map svg .territory-selected-target {
-  stroke: #ff5a5a !important;
-  stroke-width: 3.5 !important;
-  stroke-dasharray: 8 4 !important;
-  animation: attackPulse 1s ease-in-out infinite;
-  filter:
-    drop-shadow(0 0 14px rgba(255, 95, 95, 0.9))
-    drop-shadow(0 0 3px rgba(35, 10, 10, 0.62));
-}
-
-.arena-map svg .territory-selected-fortify-source {
-  stroke: #92e4ff !important;
-  stroke-width: 3 !important;
-  filter:
-    drop-shadow(0 0 10px rgba(127, 217, 255, 0.78))
-    drop-shadow(0 0 3px rgba(8, 23, 32, 0.58));
-}
-
-.arena-map svg .territory-selected-fortify-target {
-  stroke: #a8e8ff !important;
-  stroke-width: 2.85 !important;
-  stroke-dasharray: 7 3 !important;
-  filter:
-    drop-shadow(0 0 9px rgba(157, 226, 255, 0.72))
-    drop-shadow(0 0 3px rgba(9, 20, 28, 0.58));
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
 }
 
 .map-zoom-tools {

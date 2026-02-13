@@ -1,8 +1,8 @@
-# World Classic Pack
+﻿# World Classic Pack
 
 Current files:
 - `map.json` (complete classic territory graph: 42 territories, 6 continents, full adjacency)
-- `Risk_board.svg` (board geometry with canonical territory IDs)
+- `world map.png` + `territories-png/*.png` (nuovi asset mappa e territori)
 - `i18n/en.json` (complete territory labels)
 - `i18n/it.json` (complete territory labels)
 - `cards/objective/objective_card_blank.svg`
@@ -13,3 +13,4 @@ Current files:
 Notes:
 - Keep territory IDs unchanged when updating board geometry.
 - Card assets are grouped under `cards/` by purpose.
+
