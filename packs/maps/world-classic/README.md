@@ -2,6 +2,7 @@
 
 Current files:
 - `map.json` (complete classic territory graph: 42 territories, 6 continents, full adjacency)
+- `map.svg` (auto-generated vector territory paths, one `<g id=\"territory_id\">` per territory)
 - `world map.png` + `territories-png/*.png` (nuovi asset mappa e territori)
 - `i18n/en.json` (complete territory labels)
 - `i18n/it.json` (complete territory labels)
@@ -13,4 +14,5 @@ Current files:
 Notes:
 - Keep territory IDs unchanged when updating board geometry.
 - Card assets are grouped under `cards/` by purpose.
+- Regenerate vector map from PNG masks with: `python scripts/generate_map_svg.py`
 

@@ -590,11 +590,13 @@ button:disabled {
 
 .territory-card-territory-window {
   position: absolute;
-  left: 4.4%;
-  top: 18.6%;
-  width: 91.2%;
-  height: 65.7%;
-  border-radius: 4.8%;
+  left: 14.4%;
+  top: 29.43%;
+  width: 71.2%;
+  height: 46.57%;
+  border-radius: 4%;
+  padding: 7%;
+  box-sizing: border-box;
   display: grid;
   place-items: center;
   background: rgba(243, 244, 238, 0.9);
@@ -1145,9 +1147,40 @@ button:disabled {
 .map-borders-overlay-image {
   position: absolute;
   inset: 0;
-  opacity: 0.94;
-  filter: drop-shadow(0 0 0.7px rgba(252, 244, 220, 0.22));
+  opacity: 1;
+  filter: drop-shadow(0 0 2.2px rgba(255, 247, 228, 0.45)) contrast(1.06);
   pointer-events: none;
+}
+
+.map-borders-vector-overlay {
+  position: absolute;
+  inset: 0;
+  width: calc(min(92vw, 1480px) * var(--map-scale));
+  height: auto;
+  pointer-events: none;
+}
+
+.map-border-path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.map-border-path-base {
+  stroke: rgba(17, 14, 10, 0.84);
+  stroke-width: 3.8;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.42));
+}
+
+.map-border-path-mid {
+  stroke: rgba(220, 205, 175, 0.98);
+  stroke-width: 2.35;
+}
+
+.map-border-path-top {
+  stroke: rgba(255, 250, 238, 1);
+  stroke-width: 1.2;
 }
 
 .map-selection-overlay-image {
@@ -1198,6 +1231,42 @@ button:disabled {
   pointer-events: none;
 }
 
+.map-sea-overlay {
+  position: absolute;
+  inset: 0;
+  width: calc(min(92vw, 1480px) * var(--map-scale));
+  height: auto;
+  pointer-events: none;
+}
+
+.map-sea-overlay .sea-link {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-sea-overlay .sea-link-base {
+  stroke: rgba(14, 24, 34, 0.72);
+  stroke-width: 3.1px;
+}
+
+.map-sea-overlay .sea-link-top {
+  stroke: rgba(233, 243, 252, 0.9);
+  stroke-width: 1.35px;
+  stroke-dasharray: 7 6;
+  animation: seaLaneMove 1.3s linear infinite;
+}
+
+@keyframes seaLaneMove {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+
 .map-reinforce-overlay {
   position: absolute;
   inset: 0;
@@ -1229,6 +1298,37 @@ button:disabled {
   width: calc(min(92vw, 1480px) * var(--map-scale));
   height: auto;
   pointer-events: none;
+}
+
+.map-selection-overlay .selection-path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-width: 2.2px;
+  stroke-dasharray: 9 7;
+  animation: territoryDashMove 0.9s linear infinite;
+}
+
+.map-selection-overlay .selection-path.reinforce,
+.map-selection-overlay .selection-path.fortify {
+  stroke: rgba(232, 242, 252, 0.98);
+  filter: drop-shadow(0 0 3px rgba(120, 156, 187, 0.55));
+}
+
+.map-selection-overlay .selection-path.attackFrom,
+.map-selection-overlay .selection-path.attackTo {
+  stroke: rgba(255, 116, 102, 0.98);
+  filter: drop-shadow(0 0 4px rgba(162, 31, 31, 0.72));
+}
+
+@keyframes territoryDashMove {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -16;
+  }
 }
 
 .selected-source-marker circle {
@@ -1305,11 +1405,11 @@ button:disabled {
 .map-owner-chip text {
   fill: #ffffff;
   stroke: rgba(8, 14, 22, 0.94);
-  stroke-width: 0.9px;
+  stroke-width: 1.1px;
   paint-order: stroke;
   text-anchor: middle;
   dominant-baseline: middle;
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 900;
   letter-spacing: 0.01em;
 }
@@ -1317,33 +1417,34 @@ button:disabled {
 .map-owner-count circle {
   fill: rgba(11, 20, 30, 0.94);
   stroke: rgba(236, 245, 252, 0.9);
-  stroke-width: 0.9px;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.42));
+  stroke-width: 1.05px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.34));
 }
 
 .map-owner-chip > circle {
   stroke: rgba(234, 242, 249, 0.95);
-  stroke-width: 1.1px;
+  stroke-width: 1.3px;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.48));
 }
 
 .map-owner-chip image {
-  filter: drop-shadow(0 1px 2px rgba(3, 7, 14, 0.55));
+  filter: drop-shadow(0 1px 1px rgba(3, 7, 14, 0.42));
+  image-rendering: auto;
 }
 
 .map-label-overlay text {
   fill: #f5efe0;
   stroke: rgba(14, 21, 30, 0.9);
-  stroke-width: 1.25px;
+  stroke-width: 1.4px;
   paint-order: stroke;
   text-anchor: middle;
   dominant-baseline: middle;
   font-family: "Cinzel", "Bookman Old Style", "Times New Roman", serif;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.018em;
   text-transform: capitalize;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+  filter: none;
 }
 
 .map-zoom-tools {

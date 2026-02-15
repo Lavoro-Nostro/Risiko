@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { labelForTerritory, worldClassic } from "./map/worldClassic";
+import mapVectorSvgRaw from "@packs/maps/world-classic/map.svg?raw";
 import objectiveCardTemplateRaw from "@packs/maps/world-classic/cards/objective/objective_card_blank.svg?raw";
 import jokerCardRaw from "@packs/maps/world-classic/cards/joker/joker_card.svg?raw";
 import objectiveCardBackRaw from "@packs/assets/card-backs/objective_card_back.svg?raw";
@@ -32,6 +33,10 @@ type TerritoryOverlay = {
   labelFontSize: number;
   labelWidth: number;
   labelHeight: number;
+  labelRotation: number;
+  labelCurvePath?: string;
+  labelCurveText?: string;
+  labelFontScale: number;
 };
 
 type OverlayTuning = {
@@ -42,6 +47,18 @@ type OverlayTuning = {
   fontScale?: number;
 };
 
+type LabelCurveTuning = {
+  span?: number;
+  arch?: number;
+  offsetY?: number;
+};
+
+type LabelStyleTuning = {
+  rotation?: number;
+  fontScale?: number;
+  curve?: LabelCurveTuning;
+};
+
 type TerritoryMask = {
   minX: number;
   minY: number;
@@ -49,10 +66,464 @@ type TerritoryMask = {
   height: number;
   alpha: Uint8Array;
   borderPoints: Uint32Array;
+  outlineLoops: Array<Array<{ x: number; y: number }>>;
   centerX: number;
   centerY: number;
   area: number;
 };
+
+type VectorTerritoryMap = {
+  width: number;
+  height: number;
+  pathsById: Record<string, string[]>;
+};
+
+type OwnershipGrid = {
+  width: number;
+  height: number;
+  ownerByPixel: Int16Array;
+  territoryIds: string[];
+};
+
+const MAP_ALPHA_SOLID_THRESHOLD = 28;
+const MAP_OWNER_ASSIGNMENT_THRESHOLD = 64;
+const MAP_BORDER_BASE_WIDTH = 3.25;
+const MAP_BORDER_MID_WIDTH = 2.05;
+const MAP_BORDER_TOP_WIDTH = 1.15;
+
+function simplifyClosedLoop(points: Array<{ x: number; y: number }>): Array<{ x: number; y: number }> {
+  if (points.length < 4) {
+    return points;
+  }
+  const simplified: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < points.length; i += 1) {
+    const prev = points[(i - 1 + points.length) % points.length];
+    const curr = points[i];
+    const next = points[(i + 1) % points.length];
+    const collinearX = prev.x === curr.x && curr.x === next.x;
+    const collinearY = prev.y === curr.y && curr.y === next.y;
+    if (collinearX || collinearY) {
+      continue;
+    }
+    simplified.push(curr);
+  }
+  return simplified.length >= 3 ? simplified : points;
+}
+
+function smoothClosedLoop(points: Array<{ x: number; y: number }>, passes: number): Array<{ x: number; y: number }> {
+  let current = points;
+  for (let pass = 0; pass < passes; pass += 1) {
+    if (current.length < 3) {
+      break;
+    }
+    const next: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i < current.length; i += 1) {
+      const p0 = current[i];
+      const p1 = current[(i + 1) % current.length];
+      next.push({ x: p0.x * 0.75 + p1.x * 0.25, y: p0.y * 0.75 + p1.y * 0.25 });
+      next.push({ x: p0.x * 0.25 + p1.x * 0.75, y: p0.y * 0.25 + p1.y * 0.75 });
+    }
+    current = next;
+  }
+  return current;
+}
+
+function buildOutlineLoopsFromAlpha(
+  alpha: Uint8Array,
+  width: number,
+  height: number,
+  minX: number,
+  minY: number,
+  threshold = 10
+): Array<Array<{ x: number; y: number }>> {
+  type Edge = { a: number; b: number };
+  const vertices: Array<{ x: number; y: number }> = [];
+  const vertexIndexByKey = new Map<string, number>();
+  const edges: Edge[] = [];
+  const adjacency = new Map<number, number[]>();
+
+  const getVertexIndex = (x: number, y: number) => {
+    const key = `${x},${y}`;
+    const existing = vertexIndexByKey.get(key);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const idx = vertices.length;
+    vertices.push({ x, y });
+    vertexIndexByKey.set(key, idx);
+    return idx;
+  };
+
+  const addEdge = (ax: number, ay: number, bx: number, by: number) => {
+    const a = getVertexIndex(ax, ay);
+    const b = getVertexIndex(bx, by);
+    const edgeIndex = edges.length;
+    edges.push({ a, b });
+    if (!adjacency.has(a)) adjacency.set(a, []);
+    if (!adjacency.has(b)) adjacency.set(b, []);
+    adjacency.get(a)!.push(edgeIndex);
+    adjacency.get(b)!.push(edgeIndex);
+  };
+
+  const alphaAt = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= width || y >= height) {
+      return 0;
+    }
+    return alpha[y * width + x];
+  };
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (alphaAt(x, y) <= threshold) {
+        continue;
+      }
+      if (alphaAt(x - 1, y) <= threshold) addEdge(x, y, x, y + 1);
+      if (alphaAt(x + 1, y) <= threshold) addEdge(x + 1, y, x + 1, y + 1);
+      if (alphaAt(x, y - 1) <= threshold) addEdge(x, y, x + 1, y);
+      if (alphaAt(x, y + 1) <= threshold) addEdge(x, y + 1, x + 1, y + 1);
+    }
+  }
+
+  const used = new Uint8Array(edges.length);
+  const loops: Array<Array<{ x: number; y: number }>> = [];
+
+  for (let startEdge = 0; startEdge < edges.length; startEdge += 1) {
+    if (used[startEdge]) {
+      continue;
+    }
+    used[startEdge] = 1;
+    const first = edges[startEdge];
+    const chain: number[] = [first.a, first.b];
+    let prev = first.a;
+    let current = first.b;
+    const start = first.a;
+    const maxSteps = Math.max(32, edges.length * 2);
+
+    for (let step = 0; step < maxSteps; step += 1) {
+      const edgeList = adjacency.get(current) ?? [];
+      let nextEdgeIndex = -1;
+      let nextVertex = -1;
+      for (const edgeIndex of edgeList) {
+        if (used[edgeIndex]) {
+          continue;
+        }
+        const edge = edges[edgeIndex];
+        const candidate = edge.a === current ? edge.b : edge.a;
+        if (candidate === prev && edgeList.length > 1) {
+          continue;
+        }
+        nextEdgeIndex = edgeIndex;
+        nextVertex = candidate;
+        break;
+      }
+      if (nextEdgeIndex < 0 || nextVertex < 0) {
+        break;
+      }
+      used[nextEdgeIndex] = 1;
+      chain.push(nextVertex);
+      prev = current;
+      current = nextVertex;
+      if (current === start) {
+        break;
+      }
+    }
+
+    if (chain.length < 4 || chain[chain.length - 1] !== start) {
+      continue;
+    }
+
+    const rawLoop = chain
+      .slice(0, -1)
+      .map(vertexIndex => {
+        const point = vertices[vertexIndex];
+        return { x: minX + point.x, y: minY + point.y };
+      });
+    if (rawLoop.length < 3) {
+      continue;
+    }
+    const simplified = simplifyClosedLoop(rawLoop);
+    const smoothed = smoothClosedLoop(simplified, 1);
+    loops.push(smoothed);
+  }
+
+  return loops;
+}
+
+function masksShareBoundary(a: TerritoryMask, b: TerritoryMask, threshold = 10): boolean {
+  const aMinX = a.minX;
+  const aMinY = a.minY;
+  const aMaxX = a.minX + a.width - 1;
+  const aMaxY = a.minY + a.height - 1;
+  const bMinX = b.minX;
+  const bMinY = b.minY;
+  const bMaxX = b.minX + b.width - 1;
+  const bMaxY = b.minY + b.height - 1;
+
+  if (aMaxX < bMinX - 1 || bMaxX < aMinX - 1 || aMaxY < bMinY - 1 || bMaxY < aMinY - 1) {
+    return false;
+  }
+
+  const overlapMinX = Math.max(aMinX, bMinX) - 1;
+  const overlapMinY = Math.max(aMinY, bMinY) - 1;
+  const overlapMaxX = Math.min(aMaxX, bMaxX) + 1;
+  const overlapMaxY = Math.min(aMaxY, bMaxY) + 1;
+
+  const alphaAt = (mask: TerritoryMask, x: number, y: number) => {
+    if (x < mask.minX || y < mask.minY || x >= mask.minX + mask.width || y >= mask.minY + mask.height) {
+      return 0;
+    }
+    return mask.alpha[(y - mask.minY) * mask.width + (x - mask.minX)];
+  };
+
+  for (let y = overlapMinY; y <= overlapMaxY; y += 1) {
+    for (let x = overlapMinX; x <= overlapMaxX; x += 1) {
+      if (alphaAt(a, x, y) <= threshold) {
+        continue;
+      }
+      if (
+        alphaAt(b, x - 1, y) > threshold ||
+        alphaAt(b, x + 1, y) > threshold ||
+        alphaAt(b, x, y - 1) > threshold ||
+        alphaAt(b, x, y + 1) > threshold
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function buildOutlineLoopsFromOwnershipGrid(
+  ownerByPixel: Int16Array,
+  width: number,
+  height: number
+): Array<Array<{ x: number; y: number }>> {
+  type Edge = { a: number; b: number };
+  const vertices: Array<{ x: number; y: number }> = [];
+  const vertexIndexByKey = new Map<string, number>();
+  const edges: Edge[] = [];
+  const adjacency = new Map<number, number[]>();
+
+  const getVertexIndex = (x: number, y: number) => {
+    const key = `${x},${y}`;
+    const existing = vertexIndexByKey.get(key);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const idx = vertices.length;
+    vertices.push({ x, y });
+    vertexIndexByKey.set(key, idx);
+    return idx;
+  };
+
+  const addEdge = (ax: number, ay: number, bx: number, by: number) => {
+    const a = getVertexIndex(ax, ay);
+    const b = getVertexIndex(bx, by);
+    const edgeIndex = edges.length;
+    edges.push({ a, b });
+    if (!adjacency.has(a)) adjacency.set(a, []);
+    if (!adjacency.has(b)) adjacency.set(b, []);
+    adjacency.get(a)!.push(edgeIndex);
+    adjacency.get(b)!.push(edgeIndex);
+  };
+
+  const ownerAt = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= width || y >= height) {
+      return -1;
+    }
+    return ownerByPixel[y * width + x];
+  };
+
+  for (let x = 0; x <= width; x += 1) {
+    for (let y = 0; y < height; y += 1) {
+      const left = ownerAt(x - 1, y);
+      const right = ownerAt(x, y);
+      if (left !== right && (left >= 0 || right >= 0)) {
+        addEdge(x, y, x, y + 1);
+      }
+    }
+  }
+
+  for (let y = 0; y <= height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const up = ownerAt(x, y - 1);
+      const down = ownerAt(x, y);
+      if (up !== down && (up >= 0 || down >= 0)) {
+        addEdge(x, y, x + 1, y);
+      }
+    }
+  }
+
+  const used = new Uint8Array(edges.length);
+  const loops: Array<Array<{ x: number; y: number }>> = [];
+
+  for (let startEdge = 0; startEdge < edges.length; startEdge += 1) {
+    if (used[startEdge]) {
+      continue;
+    }
+    used[startEdge] = 1;
+    const first = edges[startEdge];
+    const chain: number[] = [first.a, first.b];
+    let prev = first.a;
+    let current = first.b;
+    const start = first.a;
+    const maxSteps = Math.max(32, edges.length * 2);
+
+    for (let step = 0; step < maxSteps; step += 1) {
+      const edgeList = adjacency.get(current) ?? [];
+      let nextEdgeIndex = -1;
+      let nextVertex = -1;
+      for (const edgeIndex of edgeList) {
+        if (used[edgeIndex]) {
+          continue;
+        }
+        const edge = edges[edgeIndex];
+        const candidate = edge.a === current ? edge.b : edge.a;
+        if (candidate === prev && edgeList.length > 1) {
+          continue;
+        }
+        nextEdgeIndex = edgeIndex;
+        nextVertex = candidate;
+        break;
+      }
+      if (nextEdgeIndex < 0 || nextVertex < 0) {
+        break;
+      }
+      used[nextEdgeIndex] = 1;
+      chain.push(nextVertex);
+      prev = current;
+      current = nextVertex;
+      if (current === start) {
+        break;
+      }
+    }
+
+    if (chain.length < 4 || chain[chain.length - 1] !== start) {
+      continue;
+    }
+
+    const rawLoop = chain
+      .slice(0, -1)
+      .map(vertexIndex => vertices[vertexIndex]);
+    if (rawLoop.length < 3) {
+      continue;
+    }
+    const simplified = simplifyClosedLoop(rawLoop);
+    const smoothed = smoothClosedLoop(simplified, 2);
+    loops.push(smoothed);
+  }
+
+  return loops;
+}
+
+function buildSharedBorderOverlayDataUrl(
+  ownerByPixel: Int16Array,
+  width: number,
+  height: number,
+  renderScale: number
+): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = width * renderScale;
+  canvas.height = height * renderScale;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return "";
+  }
+
+  const ownerAt = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= width || y >= height) {
+      return -1;
+    }
+    return ownerByPixel[y * width + x];
+  };
+
+  const traceSharedEdges = () => {
+    ctx.beginPath();
+    for (let x = 0; x <= width; x += 1) {
+      for (let y = 0; y < height; y += 1) {
+        const left = ownerAt(x - 1, y);
+        const right = ownerAt(x, y);
+        if (left !== right && (left >= 0 || right >= 0)) {
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, y + 1);
+        }
+      }
+    }
+    for (let y = 0; y <= height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const up = ownerAt(x, y - 1);
+        const down = ownerAt(x, y);
+        if (up !== down && (up >= 0 || down >= 0)) {
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + 1, y);
+        }
+      }
+    }
+  };
+
+  ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  traceSharedEdges();
+  ctx.strokeStyle = "rgba(16, 12, 9, 0.86)";
+  ctx.lineWidth = MAP_BORDER_BASE_WIDTH;
+  ctx.shadowBlur = 2.2;
+  ctx.shadowColor = "rgba(0, 0, 0, 0.38)";
+  ctx.stroke();
+
+  traceSharedEdges();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(221, 206, 178, 0.98)";
+  ctx.lineWidth = MAP_BORDER_MID_WIDTH;
+  ctx.stroke();
+
+  traceSharedEdges();
+  ctx.strokeStyle = "rgba(255, 250, 238, 1)";
+  ctx.lineWidth = MAP_BORDER_TOP_WIDTH;
+  ctx.stroke();
+
+  return canvas.toDataURL("image/png");
+}
+
+function parseVectorTerritoryMap(svgRaw: string): VectorTerritoryMap | null {
+  const viewBoxMatch = svgRaw.match(/viewBox="([^"]+)"/i);
+  if (!viewBoxMatch) {
+    return null;
+  }
+  const viewBoxParts = viewBoxMatch[1].trim().split(/\s+/).map(value => Number(value));
+  if (viewBoxParts.length !== 4 || !Number.isFinite(viewBoxParts[2]) || !Number.isFinite(viewBoxParts[3])) {
+    return null;
+  }
+  const width = viewBoxParts[2];
+  const height = viewBoxParts[3];
+  const pathsById: Record<string, string[]> = {};
+  const groupRegex = /<g\s+id="([^"]+)"[^>]*>([\s\S]*?)<\/g>/gi;
+  let groupMatch: RegExpExecArray | null = groupRegex.exec(svgRaw);
+  while (groupMatch) {
+    const territoryId = groupMatch[1];
+    const groupBody = groupMatch[2];
+    const pathRegex = /<path\b[^>]*\sd="([^"]+)"[^>]*>/gi;
+    const paths: string[] = [];
+    let pathMatch: RegExpExecArray | null = pathRegex.exec(groupBody);
+    while (pathMatch) {
+      const d = pathMatch[1].trim();
+      if (d) {
+        paths.push(d);
+      }
+      pathMatch = pathRegex.exec(groupBody);
+    }
+    if (paths.length) {
+      pathsById[territoryId] = paths;
+    }
+    groupMatch = groupRegex.exec(svgRaw);
+  }
+  if (!Object.keys(pathsById).length) {
+    return null;
+  }
+  return { width, height, pathsById };
+}
 
 const TERRITORY_OVERLAY_TUNING: Record<string, OverlayTuning> = {
   north_west_territory: { labelDx: -4, labelDy: -5, fontScale: 0.9 },
@@ -85,6 +556,41 @@ const TERRITORY_OVERLAY_TUNING: Record<string, OverlayTuning> = {
   kamchatka: { labelDx: 10, labelDy: -3, fontScale: 0.82, chipDx: 3, chipDy: -2 },
   western_australia: { labelDx: -12, labelDy: 8, fontScale: 0.8 },
   eastern_australia: { labelDx: 12, labelDy: 8, fontScale: 0.8 }
+};
+
+const TERRITORY_LABEL_STYLE: Record<string, LabelStyleTuning> = {
+  alaska: { rotation: -6 },
+  north_west_territory: { rotation: -2 },
+  western_united_states: { rotation: -9 },
+  eastern_united_states: { rotation: -13 },
+  central_america: { rotation: -24, fontScale: 0.94 },
+  greenland: { rotation: -8 },
+  iceland: { rotation: -18, fontScale: 0.93 },
+  great_britain: { rotation: -17, fontScale: 0.95 },
+  scandinavia: { rotation: -6 },
+  ukraine: { rotation: -8 },
+  southern_europe: { rotation: 10, fontScale: 0.94 },
+  western_europe: { rotation: 5 },
+  north_africa: { rotation: -7, curve: { span: 1.1, arch: 0.18, offsetY: -0.5 } },
+  egypt: { rotation: -5, fontScale: 0.95 },
+  east_africa: { rotation: 16, fontScale: 0.94 },
+  congo: { rotation: 10, fontScale: 0.95 },
+  south_africa: { rotation: 2 },
+  middle_east: { rotation: 3, curve: { span: 1.06, arch: 0.14 } },
+  afghanistan: { rotation: -8, fontScale: 0.95 },
+  india: { rotation: 14 },
+  china: { rotation: -4 },
+  siam: { rotation: 22, fontScale: 0.93 },
+  siberia: { rotation: -2, curve: { span: 1.14, arch: 0.12 } },
+  yakutsk: { rotation: -11 },
+  kamchatka: { rotation: -14, curve: { span: 1.2, arch: 0.2, offsetY: -0.3 } },
+  irkutsk: { rotation: -4 },
+  mongolia: { rotation: 2 },
+  japan: { rotation: -22, fontScale: 0.92 },
+  indonesia: { rotation: 15, fontScale: 0.93 },
+  new_guinea: { rotation: -10, fontScale: 0.92 },
+  western_australia: { rotation: 8 },
+  eastern_australia: { rotation: -8 }
 };
 
 type HostTerritoryState = {
@@ -278,7 +784,11 @@ const territoryCardPngUpscaledById = Object.entries(territoryCardPngUpscaledModu
   return map;
 }, {});
 const territoryCardPngById = { ...territoryCardPngBaseById, ...territoryCardPngUpscaledById };
-const territoryMapPngById = territoryCardPngBaseById;
+const territoryMapPngById = { ...territoryCardPngBaseById, ...territoryCardPngUpscaledById };
+const worldMapPngUrl =
+  Object.entries(territoryCardPngUpscaledModules).find(([path]) => path.endsWith("/world map.png"))?.[1]
+  ?? Object.entries(territoryCardPngBaseModules).find(([path]) => path.endsWith("/world map.png"))?.[1]
+  ?? "";
 
 const territoryCardTemplateById = Object.entries(territoryCardTemplateModules).reduce<Record<string, string>>((map, [path, svgUrl]) => {
   const fileName = path.split("/").pop()?.replace(".svg", "");
@@ -580,6 +1090,22 @@ async function cropTransparentPng(sourceUrl: string): Promise<string> {
   return outCanvas.toDataURL("image/png");
 }
 
+async function loadImageElement(sourceUrl: string): Promise<HTMLImageElement> {
+  const image = new Image();
+  image.decoding = "async";
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error(`Image load failed: ${sourceUrl}`));
+    image.src = sourceUrl;
+  });
+  try {
+    await image.decode();
+  } catch {
+    // Some browsers can reject decode() even when the image is already loaded.
+  }
+  return image;
+}
+
 function isLikelySetupComplete(state: HostGameState | null, phase: string): boolean {
   if (!state) {
     return false;
@@ -628,6 +1154,7 @@ function App() {
   const mapImageRef = useRef<HTMLImageElement | null>(null);
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const territoryMasksRef = useRef<Record<string, TerritoryMask>>({});
+  const ownershipGridRef = useRef<OwnershipGrid | null>(null);
   const chatLastSequenceRef = useRef(0);
   const dealStartedMatchRef = useRef<string | null>(null);
   const dealTimerIdsRef = useRef<number[]>([]);
@@ -684,8 +1211,7 @@ function App() {
   const [dealFlyVectors, setDealFlyVectors] = useState<Record<string, { x: number; y: number; rot: number }>>({});
   const [croppedTerritoryCardById, setCroppedTerritoryCardById] = useState<Record<string, string>>({});
   const [mapBoardImageUrl, setMapBoardImageUrl] = useState("");
-  const [mapBordersOverlayUrl, setMapBordersOverlayUrl] = useState("");
-  const [mapSelectionOverlayUrl, setMapSelectionOverlayUrl] = useState("");
+  const [mapBorderOverlayUrl, setMapBorderOverlayUrl] = useState("");
   const [combatPopup, setCombatPopup] = useState<{
     visible: boolean;
     rolling: boolean;
@@ -704,6 +1230,7 @@ function App() {
     () => ({ ...territoryCardPngById, ...croppedTerritoryCardById }),
     [croppedTerritoryCardById]
   );
+  const vectorTerritoryMap = useMemo(() => parseVectorTerritoryMap(mapVectorSvgRaw), []);
 
   useEffect(() => {
     let active = true;
@@ -728,21 +1255,65 @@ function App() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [vectorTerritoryMap]);
 
   useEffect(() => {
     let active = true;
     const buildMasks = async () => {
-      const firstTerritoryId = worldClassic.map.territories.find(territory => territoryMapPngById[territory.id])?.id;
-      if (!firstTerritoryId) {
-        return;
+      ownershipGridRef.current = null;
+      setMapBorderOverlayUrl("");
+      if (worldMapPngUrl) {
+        setMapBoardImageUrl(worldMapPngUrl);
       }
-      const firstImage = new Image();
-      firstImage.decoding = "async";
-      firstImage.src = territoryMapPngById[firstTerritoryId];
-      await firstImage.decode();
-      const mapWidth = Math.max(1, firstImage.naturalWidth || 1000);
-      const mapHeight = Math.max(1, firstImage.naturalHeight || 700);
+      const territorySources = worldClassic.map.territories
+        .map(territory => ({ id: territory.id, src: territoryMapPngById[territory.id] }))
+        .filter(item => !!item.src) as Array<{ id: string; src: string }>;
+      const decodedTerritories = await Promise.all(
+        territorySources.map(async item => {
+          try {
+            const image = await loadImageElement(item.src);
+            return {
+              id: item.id,
+              image,
+              width: Math.max(1, image.naturalWidth || image.width || 1),
+              height: Math.max(1, image.naturalHeight || image.height || 1)
+            };
+          } catch {
+            return null;
+          }
+        })
+      );
+      const decodedById = Object.fromEntries(
+        decodedTerritories
+          .filter((value): value is { id: string; image: HTMLImageElement; width: number; height: number } => !!value)
+          .map(value => [value.id, value])
+      );
+
+      let sourceMapWidth = 0;
+      let sourceMapHeight = 0;
+      for (const value of Object.values(decodedById)) {
+        if (value.width > sourceMapWidth) {
+          sourceMapWidth = value.width;
+        }
+        if (value.height > sourceMapHeight) {
+          sourceMapHeight = value.height;
+        }
+      }
+      if ((sourceMapWidth <= 0 || sourceMapHeight <= 0) && worldMapPngUrl) {
+        try {
+          const fallback = await loadImageElement(worldMapPngUrl);
+          sourceMapWidth = Math.max(1, fallback.naturalWidth || fallback.width || 1000);
+          sourceMapHeight = Math.max(1, fallback.naturalHeight || fallback.height || 700);
+        } catch {
+          // leave defaults
+        }
+      }
+      if (sourceMapWidth <= 0 || sourceMapHeight <= 0) {
+        sourceMapWidth = 1000;
+        sourceMapHeight = 700;
+      }
+      const mapWidth = Math.max(1, Math.round(sourceMapWidth));
+      const mapHeight = Math.max(1, Math.round(sourceMapHeight));
       const dprScale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
       const renderScale = Math.max(1, Math.ceil((MAX_MAP_DISPLAY_WIDTH * dprScale) / mapWidth));
       if (!active) {
@@ -754,6 +1325,11 @@ function App() {
 
       const nextMasks: Record<string, TerritoryMask> = {};
       const nextOverlays: TerritoryOverlay[] = [];
+      const territoryIds = worldClassic.map.territories.map(territory => territory.id);
+      const territoryIndexById = new Map(territoryIds.map((id, index) => [id, index]));
+      const ownerByPixel = new Int16Array(mapWidth * mapHeight);
+      ownerByPixel.fill(-1);
+      const ownerStrengthByPixel = new Uint8Array(mapWidth * mapHeight);
       const boardCanvas = document.createElement("canvas");
       boardCanvas.width = mapWidth * renderScale;
       boardCanvas.height = mapHeight * renderScale;
@@ -768,22 +1344,38 @@ function App() {
       boardContext.setTransform(1, 0, 0, 1, 0, 0);
       boardContext.clearRect(0, 0, boardCanvas.width, boardCanvas.height);
       boardContext.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+      let drewAnyTerritory = false;
 
       for (const territory of worldClassic.map.territories) {
-        const source = territoryMapPngById[territory.id];
-        if (!source) {
+        const decoded = decodedById[territory.id];
+        if (!decoded) {
           continue;
         }
         try {
-          const img = new Image();
-          img.decoding = "async";
-          img.src = source;
-          await img.decode();
-          boardContext.drawImage(img, 0, 0, mapWidth, mapHeight);
-
+          const territoryOwnerIndex = territoryIndexById.get(territory.id) ?? -1;
           tempContext.clearRect(0, 0, mapWidth, mapHeight);
-          tempContext.drawImage(img, 0, 0, mapWidth, mapHeight);
-          const data = tempContext.getImageData(0, 0, mapWidth, mapHeight).data;
+          tempContext.drawImage(decoded.image, 0, 0, mapWidth, mapHeight);
+          const territoryImageData = tempContext.getImageData(0, 0, mapWidth, mapHeight);
+          const data = territoryImageData.data;
+
+          // Territory masks overlap on anti-aliased edge pixels. Hardening alpha
+          // avoids blended double seams when compositing adjacent territories.
+          for (let pixelIndex = 0; pixelIndex < data.length; pixelIndex += 4) {
+            const alpha = data[pixelIndex + 3];
+            const flatPixelIndex = pixelIndex >> 2;
+            data[pixelIndex + 3] = alpha <= MAP_ALPHA_SOLID_THRESHOLD ? 0 : 255;
+            if (
+              territoryOwnerIndex >= 0 &&
+              alpha >= MAP_OWNER_ASSIGNMENT_THRESHOLD &&
+              alpha > ownerStrengthByPixel[flatPixelIndex]
+            ) {
+              ownerStrengthByPixel[flatPixelIndex] = alpha;
+              ownerByPixel[flatPixelIndex] = territoryOwnerIndex;
+            }
+          }
+          tempContext.putImageData(territoryImageData, 0, 0);
+          boardContext.drawImage(tempCanvas, 0, 0);
+          drewAnyTerritory = true;
 
           let minX = mapWidth;
           let minY = mapHeight;
@@ -795,7 +1387,7 @@ function App() {
           for (let y = 0; y < mapHeight; y += 1) {
             for (let x = 0; x < mapWidth; x += 1) {
               const alpha = data[(y * mapWidth + x) * 4 + 3];
-              if (alpha <= 6) {
+              if (alpha <= MAP_ALPHA_SOLID_THRESHOLD) {
                 continue;
               }
               if (x < minX) minX = x;
@@ -845,6 +1437,7 @@ function App() {
             height: boxHeight,
             alpha: alphaMask,
             borderPoints: Uint32Array.from(borderPoints),
+            outlineLoops: buildOutlineLoopsFromAlpha(alphaMask, boxWidth, boxHeight, minX, minY),
             centerX,
             centerY,
             area
@@ -855,12 +1448,13 @@ function App() {
           const longestLineLength = Math.max(...textLines.map(line => line.length));
           const tuning = TERRITORY_OVERLAY_TUNING[territory.id] ?? {};
           const territorySpan = Math.max(8, Math.min(boxWidth, boxHeight));
-          const chipRadius = clamp(territorySpan * 0.14, 5.5, 10.5);
+          const territoryScale = clamp(Math.sqrt(area) / 120, 0.9, 1.6);
+          const chipRadius = clamp(territorySpan * 0.175 * territoryScale, 8.2, 16.5);
           const widthLimited = (boxWidth * 0.7) / Math.max(4, longestLineLength * 0.6);
           const lineCount = textLines.length;
           const heightLimited = (boxHeight * 0.27) / Math.max(1, lineCount);
-          const tunedBase = Math.min(widthLimited, heightLimited) * (tuning.fontScale ?? 1);
-          const labelFontSize = clamp(tunedBase, 4.1, 6.3);
+          const tunedBase = Math.min(widthLimited, heightLimited) * (tuning.fontScale ?? 1) * territoryScale;
+          const labelFontSize = clamp(tunedBase, 6.2, 10.8);
           const labelWidth = Math.max(30, longestLineLength * labelFontSize * 0.56);
           const labelHeight = Math.max(9.2, labelFontSize * 1.12 * lineCount);
           const innerPadX = Math.max(4, boxWidth * 0.11);
@@ -882,6 +1476,26 @@ function App() {
           const labelY = preferredAboveY < labelMinY
             ? clampInRange(preferredBelowY, labelMinY, labelMaxY)
             : clampInRange(preferredAboveY, labelMinY, labelMaxY);
+          const labelStyle = TERRITORY_LABEL_STYLE[territory.id];
+          const labelRotation = labelStyle?.rotation ?? 0;
+          const labelFontScale = labelStyle?.fontScale ?? 1;
+          let labelCurvePath: string | undefined;
+          let labelCurveText: string | undefined;
+          const autoCurve =
+            !labelStyle?.curve &&
+            lineCount === 1 &&
+            text.length >= 7 &&
+            boxWidth > boxHeight * 1.28;
+          if (labelStyle?.curve || autoCurve) {
+            const curve = labelStyle?.curve ?? { span: 1.03, arch: 0.11, offsetY: 0 };
+            const span = Math.max(18, labelWidth * (curve.span ?? 1));
+            const arch = labelHeight * (curve.arch ?? 0.14);
+            const curveY = labelY + (curve.offsetY ?? 0);
+            const startX = labelX - span * 0.5;
+            const endX = labelX + span * 0.5;
+            labelCurvePath = `M ${startX.toFixed(2)} ${curveY.toFixed(2)} Q ${labelX.toFixed(2)} ${(curveY - arch).toFixed(2)} ${endX.toFixed(2)} ${curveY.toFixed(2)}`;
+            labelCurveText = text;
+          }
 
           nextOverlays.push({
             id: territory.id,
@@ -895,6 +1509,10 @@ function App() {
             labelFontSize,
             labelWidth,
             labelHeight,
+            labelRotation,
+            labelCurvePath,
+            labelCurveText,
+            labelFontScale,
             text
           });
         } catch {
@@ -906,37 +1524,20 @@ function App() {
         return;
       }
       territoryMasksRef.current = nextMasks;
+      ownershipGridRef.current = {
+        width: mapWidth,
+        height: mapHeight,
+        ownerByPixel,
+        territoryIds
+      };
       setRegionOverlays(nextOverlays);
-      setMapBoardImageUrl(boardCanvas.toDataURL("image/png"));
+      setMapBorderOverlayUrl(buildSharedBorderOverlayDataUrl(ownerByPixel, mapWidth, mapHeight, renderScale));
+      setMapBoardImageUrl(
+        drewAnyTerritory
+          ? boardCanvas.toDataURL("image/png")
+          : (worldMapPngUrl || boardCanvas.toDataURL("image/png"))
+      );
 
-      const borderCanvas = document.createElement("canvas");
-      borderCanvas.width = mapWidth * renderScale;
-      borderCanvas.height = mapHeight * renderScale;
-      const borderCtx = borderCanvas.getContext("2d");
-      if (borderCtx) {
-        borderCtx.setTransform(1, 0, 0, 1, 0, 0);
-        borderCtx.clearRect(0, 0, borderCanvas.width, borderCanvas.height);
-        borderCtx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
-        const drawBorderLayer = (radius: number, step: number, color: string) => {
-          borderCtx.fillStyle = color;
-          borderCtx.beginPath();
-          for (const mask of Object.values(nextMasks)) {
-            for (let i = 0; i < mask.borderPoints.length; i += step) {
-              const packed = mask.borderPoints[i];
-              const localX = packed & 0xffff;
-              const localY = packed >>> 16;
-              const x = mask.minX + localX + 0.5;
-              const y = mask.minY + localY + 0.5;
-              borderCtx.moveTo(x + radius, y);
-              borderCtx.arc(x, y, radius, 0, Math.PI * 2);
-            }
-          }
-          borderCtx.fill();
-        };
-        drawBorderLayer(1.06, 1, "rgba(88, 80, 60, 0.72)");
-        drawBorderLayer(0.64, 1, "rgba(246, 236, 206, 0.9)");
-        setMapBordersOverlayUrl(borderCanvas.toDataURL("image/png"));
-      }
     };
 
     void buildMasks();
@@ -949,13 +1550,13 @@ function App() {
   const [mapScale, setMapScale] = useState(1);
   const [mapMinScale, setMapMinScale] = useState(1);
   const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window === "undefined" ? 1280 : window.innerWidth));
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [regionOverlays, setRegionOverlays] = useState<TerritoryOverlay[]>([]);
   const [mapViewBox, setMapViewBox] = useState("0 0 1000 700");
   const [mapPixelSize, setMapPixelSize] = useState({ width: 1000, height: 700 });
   const [mapRenderScale, setMapRenderScale] = useState(1);
-  const [selectionAnimTick, setSelectionAnimTick] = useState(0);
   const [hoverTerritoryId, setHoverTerritoryId] = useState("");
 
   const [reinforceTerritoryId, setReinforceTerritoryId] = useState("");
@@ -968,167 +1569,47 @@ function App() {
   const [selectedTradeCardIds, setSelectedTradeCardIds] = useState<string[]>([]);
 
   const currentPhase = parsePhase(state?.phase);
+  const viewportAdaptiveFactor = clamp(1600 / Math.max(640, viewportWidth), 0.95, 1.85);
+  const textReadabilityScale = clamp(Math.pow(1 / Math.max(0.45, mapScale), 0.74) * viewportAdaptiveFactor * 1.1, 0.95, 2.85);
+  const chipReadabilityScale = clamp(Math.pow(1 / Math.max(0.5, mapScale), 0.6) * viewportAdaptiveFactor * 0.76, 0.85, 1.75);
+  const vectorScaleX = vectorTerritoryMap ? (mapPixelSize.width / vectorTerritoryMap.width) : 1;
+  const vectorScaleY = vectorTerritoryMap ? (mapPixelSize.height / vectorTerritoryMap.height) : 1;
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setSelectionAnimTick(value => (value + 1) % 10000);
-    }, 100);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const masks = territoryMasksRef.current;
-    if (!state || !Object.keys(masks).length || mapPixelSize.width <= 0 || mapPixelSize.height <= 0) {
-      setMapSelectionOverlayUrl("");
-      return;
-    }
-
-    const overlayCanvas = document.createElement("canvas");
-    overlayCanvas.width = mapPixelSize.width * mapRenderScale;
-    overlayCanvas.height = mapPixelSize.height * mapRenderScale;
-    const overlayCtx = overlayCanvas.getContext("2d");
-    if (!overlayCtx) {
-      setMapSelectionOverlayUrl("");
-      return;
-    }
-    overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
-    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-    overlayCtx.setTransform(mapRenderScale, 0, 0, mapRenderScale, 0, 0);
-
-    const drawOutline = (
-      mask: TerritoryMask,
-      baseColor: { r: number; g: number; b: number; a: number },
-      dashColor: { r: number; g: number; b: number; a: number },
-      options: {
-        baseRadius: number;
-        baseStep: number;
-        dashRadius: number;
-        dashStep: number;
-        dashPeriod: number;
-        dashOn: number;
-        phaseSpeed: number;
-      }
-    ) => {
-      overlayCtx.fillStyle = `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, ${baseColor.a})`;
-      overlayCtx.beginPath();
-      for (let i = 0; i < mask.borderPoints.length; i += Math.max(1, options.baseStep)) {
-        const packed = mask.borderPoints[i];
-        const localX = packed & 0xffff;
-        const localY = packed >>> 16;
-        const x = mask.minX + localX + 0.5;
-        const y = mask.minY + localY + 0.5;
-        overlayCtx.moveTo(x + options.baseRadius, y);
-        overlayCtx.arc(x, y, options.baseRadius, 0, Math.PI * 2);
-      }
-      overlayCtx.fill();
-
-      const dashPeriod = Math.max(2, options.dashPeriod);
-      const dashOn = Math.max(1, Math.min(dashPeriod - 1, options.dashOn));
-      const phaseShift = Math.floor(selectionAnimTick * options.phaseSpeed);
-      overlayCtx.fillStyle = `rgba(${dashColor.r}, ${dashColor.g}, ${dashColor.b}, ${dashColor.a})`;
-      overlayCtx.beginPath();
-      for (let i = 0; i < mask.borderPoints.length; i += Math.max(1, options.dashStep)) {
-        const packed = mask.borderPoints[i];
-        const localX = packed & 0xffff;
-        const localY = packed >>> 16;
-        const xRaw = mask.minX + localX;
-        const yRaw = mask.minY + localY;
-        const angle = Math.atan2(yRaw - mask.centerY, xRaw - mask.centerX);
-        const around = Math.floor(((angle + Math.PI) / (Math.PI * 2)) * 360);
-        if (((around + phaseShift) % dashPeriod) >= dashOn) {
-          continue;
-        }
-        const x = xRaw + 0.5;
-        const y = yRaw + 0.5;
-        overlayCtx.moveTo(x + options.dashRadius, y);
-        overlayCtx.arc(x, y, options.dashRadius, 0, Math.PI * 2);
-      }
-      overlayCtx.fill();
-    };
-
-    const drawById = (
-      territoryId: string,
-      baseColor: { r: number; g: number; b: number; a: number },
-      dashColor: { r: number; g: number; b: number; a: number },
-      options: {
-        baseRadius: number;
-        baseStep: number;
-        dashRadius: number;
-        dashStep: number;
-        dashPeriod: number;
-        dashOn: number;
-        phaseSpeed: number;
-      }
-    ) => {
-      const mask = masks[territoryId];
-      if (!mask) {
-        return;
-      }
-      drawOutline(mask, baseColor, dashColor, options);
-    };
-
+  const selectionPathSpecs = useMemo(() => {
+    const specs: Array<{ territoryId: string; variant: "reinforce" | "attackFrom" | "attackTo" | "fortify" }> = [];
     if (currentPhase === "setup" || currentPhase === "reinforcement") {
       if (reinforceTerritoryId) {
-        drawById(
-          reinforceTerritoryId,
-          { r: 124, g: 136, b: 148, a: 0.56 },
-          { r: 242, g: 248, b: 255, a: 0.92 },
-          { baseRadius: 0.45, baseStep: 2, dashRadius: 0.74, dashStep: 2, dashPeriod: 28, dashOn: 10, phaseSpeed: 0.45 }
-        );
+        specs.push({ territoryId: reinforceTerritoryId, variant: "reinforce" });
       }
+      return specs;
     }
     if (currentPhase === "attack") {
       if (attackFromId) {
-        drawById(
-          attackFromId,
-          { r: 136, g: 54, b: 54, a: 0.58 },
-          { r: 255, g: 104, b: 96, a: 0.95 },
-          { baseRadius: 0.48, baseStep: 2, dashRadius: 0.8, dashStep: 2, dashPeriod: 26, dashOn: 10, phaseSpeed: 0.5 }
-        );
+        specs.push({ territoryId: attackFromId, variant: "attackFrom" });
       }
       if (attackToId) {
-        drawById(
-          attackToId,
-          { r: 145, g: 62, b: 62, a: 0.62 },
-          { r: 255, g: 84, b: 84, a: 0.98 },
-          { baseRadius: 0.52, baseStep: 2, dashRadius: 0.86, dashStep: 2, dashPeriod: 24, dashOn: 10, phaseSpeed: 0.6 }
-        );
+        specs.push({ territoryId: attackToId, variant: "attackTo" });
       }
+      return specs;
     }
     if (currentPhase === "fortify") {
       if (fortifyFromId) {
-        drawById(
-          fortifyFromId,
-          { r: 122, g: 145, b: 161, a: 0.58 },
-          { r: 234, g: 244, b: 252, a: 0.94 },
-          { baseRadius: 0.45, baseStep: 2, dashRadius: 0.74, dashStep: 2, dashPeriod: 28, dashOn: 10, phaseSpeed: 0.45 }
-        );
+        specs.push({ territoryId: fortifyFromId, variant: "fortify" });
       }
       if (fortifyToId) {
-        drawById(
-          fortifyToId,
-          { r: 122, g: 145, b: 161, a: 0.58 },
-          { r: 234, g: 244, b: 252, a: 0.94 },
-          { baseRadius: 0.45, baseStep: 2, dashRadius: 0.74, dashStep: 2, dashPeriod: 28, dashOn: 10, phaseSpeed: 0.45 }
-        );
+        specs.push({ territoryId: fortifyToId, variant: "fortify" });
       }
     }
+    return specs;
+  }, [currentPhase, reinforceTerritoryId, attackFromId, attackToId, fortifyFromId, fortifyToId]);
 
-    setMapSelectionOverlayUrl(overlayCanvas.toDataURL("image/png"));
-  }, [
-    state,
-    playerId,
-    currentPhase,
-    reinforceTerritoryId,
-    attackFromId,
-    attackToId,
-    fortifyFromId,
-    fortifyToId,
-    selectionAnimTick,
-    mapRenderScale,
-    mapPixelSize.width,
-    mapPixelSize.height
-  ]);
+  useEffect(() => {
+    const onResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const myObjective = state?.objectivesByPlayerId?.[playerId];
   const territoryList = Object.values(state?.territories ?? {});
@@ -1472,6 +1953,59 @@ function App() {
     }
     return lines;
   }, [attackFromId, attackToId, currentPhase, isMyTurn, overlayById, playerId, state]);
+  const seaConnectionPaths = useMemo(() => {
+    if (!regionOverlays.length) {
+      return [] as Array<{ key: string; d: string }>;
+    }
+    const masks = territoryMasksRef.current;
+    const overlayMap = new Map(regionOverlays.map(overlay => [overlay.id, overlay]));
+    const seen = new Set<string>();
+    const paths: Array<{ key: string; d: string }> = [];
+
+    for (const territory of worldClassic.map.territories) {
+      for (const neighborId of territory.neighbors) {
+        const a = territory.id;
+        const b = neighborId;
+        const key = a < b ? `${a}::${b}` : `${b}::${a}`;
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+
+        const maskA = masks[a];
+        const maskB = masks[b];
+        const overlayA = overlayMap.get(a);
+        const overlayB = overlayMap.get(b);
+        if (!maskA || !maskB || !overlayA || !overlayB) {
+          continue;
+        }
+        if (masksShareBoundary(maskA, maskB, 12)) {
+          continue;
+        }
+
+        const x1 = overlayA.centerX;
+        const y1 = overlayA.centerY;
+        const x2 = overlayB.centerX;
+        const y2 = overlayB.centerY;
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const length = Math.hypot(dx, dy);
+        if (!Number.isFinite(length) || length < 14) {
+          continue;
+        }
+        const normalX = -dy / length;
+        const normalY = dx / length;
+        const bend = clamp(length * 0.13, 18, 62);
+        const sign = key.charCodeAt(0) % 2 === 0 ? 1 : -1;
+        const cx = (x1 + x2) * 0.5 + normalX * bend * sign;
+        const cy = (y1 + y2) * 0.5 + normalY * bend * sign;
+        const d = `M ${x1.toFixed(2)} ${y1.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+        paths.push({ key, d });
+      }
+    }
+
+    return paths;
+  }, [regionOverlays]);
   const playerColorById = useMemo(() => {
     if (!state) {
       return {} as Record<string, string>;
@@ -1608,24 +2142,13 @@ function App() {
     }
 
     let selectedId = "";
-    let smallestArea = Number.POSITIVE_INFINITY;
-    for (const territory of worldClassic.map.territories) {
-      const mask = territoryMasksRef.current[territory.id];
-      if (!mask) {
-        continue;
-      }
-      const x = Math.floor(localX);
-      const y = Math.floor(localY);
-      if (x < mask.minX || y < mask.minY || x >= mask.minX + mask.width || y >= mask.minY + mask.height) {
-        continue;
-      }
-      const alpha = mask.alpha[(y - mask.minY) * mask.width + (x - mask.minX)];
-      if (alpha <= 10) {
-        continue;
-      }
-      if (mask.area < smallestArea) {
-        smallestArea = mask.area;
-        selectedId = territory.id;
+    const x = Math.floor(localX);
+    const y = Math.floor(localY);
+    const ownershipGrid = ownershipGridRef.current;
+    if (ownershipGrid && x >= 0 && y >= 0 && x < ownershipGrid.width && y < ownershipGrid.height) {
+      const ownerIndex = ownershipGrid.ownerByPixel[y * ownershipGrid.width + x];
+      if (ownerIndex >= 0 && ownerIndex < ownershipGrid.territoryIds.length) {
+        selectedId = ownershipGrid.territoryIds[ownerIndex];
       }
     }
 
@@ -2048,9 +2571,9 @@ function App() {
       }
 
       const fitScale = Math.max(viewportRect.width / baseWidth, viewportRect.height / baseHeight);
-      // Keep map readable but allow a bit more zoom-out than full-fit.
-      const strictMinScale = fitScale * 0.88;
-      const nextMin = clamp(strictMinScale, 0.5, 2.2);
+      // Keep map readable but allow more zoom-out than full-fit.
+      const strictMinScale = fitScale * 0.74;
+      const nextMin = clamp(strictMinScale, 0.35, 2.2);
       setMapMinScale(previous => (Math.abs(previous - nextMin) < 0.005 ? previous : nextMin));
       setMapScale(previous => (previous < nextMin ? nextMin : previous));
     };
@@ -2301,9 +2824,15 @@ function App() {
         </div>
       );
     }
+    if (templateUrl) {
+      return (
+        <div className="territory-svg-card">
+          <img src={templateUrl} alt={labelForTerritory(territoryId)} className="territory-card-template" draggable={false} />
+        </div>
+      );
+    }
     return (
       <div className="territory-svg-card">
-        {templateUrl ? <img src={templateUrl} alt={labelForTerritory(territoryId)} className="territory-card-template" draggable={false} /> : null}
         {pngUrl ? (
           <div className="territory-card-territory-window" aria-hidden>
             <img src={pngUrl} alt="" className="territory-card-territory-image" draggable={false} />
@@ -2528,21 +3057,18 @@ function App() {
             }}
           >
             <img ref={mapImageRef} src={mapBoardImageUrl} alt="Mappa Risiko" className="arena-map-board-image" draggable={false} />
-            {mapBordersOverlayUrl ? (
-              <img
-                src={mapBordersOverlayUrl}
-                alt=""
-                className="arena-map-board-image map-borders-overlay-image"
-                draggable={false}
-              />
+            {mapBorderOverlayUrl ? (
+              <img src={mapBorderOverlayUrl} alt="" className="arena-map-board-image map-borders-overlay-image" draggable={false} />
             ) : null}
-            {mapSelectionOverlayUrl ? (
-              <img
-                src={mapSelectionOverlayUrl}
-                alt=""
-                className="arena-map-board-image map-selection-overlay-image"
-                draggable={false}
-              />
+            {seaConnectionPaths.length ? (
+              <svg className="map-sea-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
+                {seaConnectionPaths.map(path => (
+                  <path key={`sea-base-${path.key}`} d={path.d} className="sea-link sea-link-base" />
+                ))}
+                {seaConnectionPaths.map(path => (
+                  <path key={`sea-top-${path.key}`} d={path.d} className="sea-link sea-link-top" />
+                ))}
+              </svg>
             ) : null}
             <svg className="map-attack-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
               {attackPreviewLines.map(line => (
@@ -2557,6 +3083,15 @@ function App() {
               ))}
             </svg>
             <svg className="map-selection-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
+              {vectorTerritoryMap && selectionPathSpecs.length ? (
+                <g transform={`scale(${vectorScaleX} ${vectorScaleY})`}>
+                  {selectionPathSpecs.flatMap(spec => (
+                    (vectorTerritoryMap.pathsById[spec.territoryId] ?? []).map((d, index) => (
+                      <path key={`${spec.variant}-${spec.territoryId}-${index}`} d={d} className={`selection-path ${spec.variant}`} />
+                    ))
+                  ))}
+                </g>
+              ) : null}
               {currentPhase === "attack" && attackFromId && overlayById.has(attackFromId) ? (
                 <g
                   className="selected-source-marker"
@@ -2576,23 +3111,24 @@ function App() {
                 const ownerColor = playerColorById[territory.ownerPlayerId] ?? "#7f92a5";
                 const ownerIndex = state?.players.findIndex(player => player.playerId === territory.ownerPlayerId) ?? -1;
                 const tankAsset = ownerIndex >= 0 ? PLAYER_TANK_ASSETS[ownerIndex % PLAYER_TANK_ASSETS.length] : null;
-                const counterRadius = Math.max(3.2, overlay.chipRadius * 0.42);
+                const chipRenderRadius = overlay.chipRadius * chipReadabilityScale;
+                const counterRadius = Math.max(4.2, chipRenderRadius * 0.4);
                 return (
                   <g key={`owner-${overlay.id}-${territory.armies}-${territory.ownerPlayerId}`} className="map-owner-chip" transform={`translate(${overlay.centerX} ${overlay.chipY})`}>
-                    <circle cx="0" cy="0" r={overlay.chipRadius} fill={ownerColor} />
+                    <circle cx="0" cy="0" r={chipRenderRadius} fill={ownerColor} />
                     {tankAsset ? (
                       <image
                         href={tankAsset}
-                        x={-overlay.chipRadius * 0.86}
-                        y={-overlay.chipRadius * 0.84}
-                        width={overlay.chipRadius * 1.72}
-                        height={overlay.chipRadius * 1.72}
+                        x={-chipRenderRadius * 0.95}
+                        y={-chipRenderRadius * 0.92}
+                        width={chipRenderRadius * 1.9}
+                        height={chipRenderRadius * 1.9}
                         preserveAspectRatio="xMidYMid meet"
                       />
                     ) : null}
-                    <g className="map-owner-count" transform={`translate(${overlay.chipRadius * 0.56} ${-overlay.chipRadius * 0.54})`}>
+                    <g className="map-owner-count" transform={`translate(${chipRenderRadius * 0.56} ${-chipRenderRadius * 0.54})`}>
                       <circle r={counterRadius} />
-                      <text y={counterRadius * 0.03} style={{ fontSize: `${Math.max(6, overlay.chipRadius * 0.78)}px` }}>
+                      <text y={counterRadius * 0.03} style={{ fontSize: `${Math.max(7.2, chipRenderRadius * 0.76)}px` }}>
                         {territory.armies}
                       </text>
                     </g>
@@ -2601,18 +3137,49 @@ function App() {
               })}
             </svg>
             <svg className="map-label-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
-              {regionOverlays.map(overlay => (
-                <text key={overlay.id} x={overlay.labelX} y={overlay.labelY} style={{ fontSize: `${overlay.labelFontSize}px` }}>
-                  {overlay.textLines.map((line, index) => {
-                    const lineOffset = (index - (overlay.textLines.length - 1) / 2) * overlay.labelFontSize * 1.12;
-                    return (
-                      <tspan key={`${overlay.id}-line-${index}`} x={overlay.labelX} dy={index === 0 ? lineOffset : overlay.labelFontSize * 1.12}>
-                        {line}
-                      </tspan>
-                    );
-                  })}
-                </text>
-              ))}
+              <defs>
+                {regionOverlays
+                  .filter(overlay => !!overlay.labelCurvePath)
+                  .map(overlay => (
+                    <path key={`label-curve-${overlay.id}`} id={`label-curve-${overlay.id}`} d={overlay.labelCurvePath} />
+                  ))}
+              </defs>
+              {regionOverlays.map(overlay => {
+                const scaledFontSize = Math.max(8.4, overlay.labelFontSize * overlay.labelFontScale * textReadabilityScale);
+                const textStrokeWidth = clamp(1.06 * textReadabilityScale, 1.02, 1.85);
+                if (overlay.labelCurvePath) {
+                  return (
+                    <text
+                      key={overlay.id}
+                      style={{ fontSize: `${scaledFontSize}px`, strokeWidth: `${textStrokeWidth}px` }}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      <textPath href={`#label-curve-${overlay.id}`} startOffset="50%">
+                        {overlay.labelCurveText ?? overlay.text}
+                      </textPath>
+                    </text>
+                  );
+                }
+                return (
+                  <text
+                    key={overlay.id}
+                    x={overlay.labelX}
+                    y={overlay.labelY}
+                    style={{ fontSize: `${scaledFontSize}px`, strokeWidth: `${textStrokeWidth}px` }}
+                    transform={overlay.labelRotation ? `rotate(${overlay.labelRotation} ${overlay.labelX} ${overlay.labelY})` : undefined}
+                  >
+                    {overlay.textLines.map((line, index) => {
+                      const lineOffset = (index - (overlay.textLines.length - 1) / 2) * scaledFontSize * 1.12;
+                      return (
+                        <tspan key={`${overlay.id}-line-${index}`} x={overlay.labelX} dy={index === 0 ? lineOffset : scaledFontSize * 1.12}>
+                          {line}
+                        </tspan>
+                      );
+                    })}
+                  </text>
+                );
+              })}
             </svg>
             {canPlaceFromMap ? (
               <svg className="map-reinforce-overlay" viewBox={mapViewBox} preserveAspectRatio="xMidYMid meet">
@@ -3089,7 +3656,7 @@ function App() {
                           } as CSSProperties
                         }
                       >
-                        {(territoryCardImageById[id] ?? pngForTerritoryCard(id))
+                        {(templateForTerritoryCard(id) || territoryCardImageById[id] || pngForTerritoryCard(id))
                           ? renderFlipCard(
                               renderTerritoryCard(id),
                               <div className="territory-svg-card" dangerouslySetInnerHTML={{ __html: territoryCardBackRaw }} />,
@@ -3117,3 +3684,5 @@ function App() {
 }
 
 export default App;
+
+

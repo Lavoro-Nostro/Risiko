@@ -301,17 +301,22 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
             .Select((player, index) => new { player.PlayerId, Color = PlayerColorCycle[index % PlayerColorCycle.Length] })
             .ToDictionary(x => x.PlayerId, x => x.Color, StringComparer.Ordinal);
         var colorsPresent = new HashSet<string>(playerColorById.Values, StringComparer.Ordinal);
-        var deck = Shuffle(BuildOfficialObjectiveDeck().ToList(), random);
+        var deck = BuildOfficialObjectiveDeck().ToList();
         var objectives = new Dictionary<string, PlayerObjectiveState>(StringComparer.Ordinal);
 
         for (var i = 0; i < players.Count; i++)
         {
             var owner = players[i];
-            var chosenIndex = deck.FindIndex(template => IsObjectiveCompatible(template, owner.PlayerId, playerColorById, colorsPresent));
-            var template = chosenIndex >= 0 ? deck[chosenIndex] : null;
-            if (chosenIndex >= 0)
+            var compatible = deck
+                .Select((template, index) => new { template, index })
+                .Where(x => IsObjectiveCompatible(x.template, owner.PlayerId, playerColorById, colorsPresent))
+                .ToList();
+            ObjectiveTemplate? template = null;
+            if (compatible.Count > 0)
             {
-                deck.RemoveAt(chosenIndex);
+                var picked = compatible[random.Next(compatible.Count)];
+                template = picked.template;
+                deck.RemoveAt(picked.index);
             }
 
             objectives[owner.PlayerId] = template is null
