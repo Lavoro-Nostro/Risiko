@@ -91,6 +91,35 @@ const MAP_BORDER_BASE_WIDTH = 3.25;
 const MAP_BORDER_MID_WIDTH = 2.05;
 const MAP_BORDER_TOP_WIDTH = 1.15;
 
+type SeaConnectionSpec = {
+  a: string;
+  b: string;
+  wrapAcrossMap?: boolean;
+  bendSign?: 1 | -1;
+  bendFactor?: number;
+};
+
+const OFFICIAL_SEA_CONNECTIONS: SeaConnectionSpec[] = [
+  { a: "alaska", b: "kamchatka", wrapAcrossMap: true },
+  { a: "greenland", b: "iceland", bendSign: 1, bendFactor: 0.12 },
+  { a: "iceland", b: "scandinavia", bendSign: -1, bendFactor: 0.14 },
+  { a: "iceland", b: "great_britain", bendSign: 1, bendFactor: 0.12 },
+  { a: "great_britain", b: "scandinavia", bendSign: 1, bendFactor: 0.1 },
+  { a: "great_britain", b: "western_europe", bendSign: -1, bendFactor: 0.1 },
+  { a: "brazil", b: "north_africa", bendSign: -1, bendFactor: 0.08 },
+  { a: "western_europe", b: "north_africa", bendSign: 1, bendFactor: 0.1 },
+  { a: "southern_europe", b: "north_africa", bendSign: -1, bendFactor: 0.11 },
+  { a: "southern_europe", b: "egypt", bendSign: 1, bendFactor: 0.09 },
+  { a: "east_africa", b: "madagascar", bendSign: -1, bendFactor: 0.12 },
+  { a: "kamchatka", b: "japan", bendSign: -1, bendFactor: 0.12 },
+  { a: "japan", b: "mongolia", bendSign: 1, bendFactor: 0.1 },
+  { a: "siam", b: "indonesia", bendSign: -1, bendFactor: 0.12 },
+  { a: "indonesia", b: "new_guinea", bendSign: 1, bendFactor: 0.12 },
+  { a: "indonesia", b: "western_australia", bendSign: -1, bendFactor: 0.13 },
+  { a: "new_guinea", b: "western_australia", bendSign: 1, bendFactor: 0.11 },
+  { a: "new_guinea", b: "eastern_australia", bendSign: -1, bendFactor: 0.11 }
+];
+
 function simplifyClosedLoop(points: Array<{ x: number; y: number }>): Array<{ x: number; y: number }> {
   if (points.length < 4) {
     return points;
@@ -292,6 +321,46 @@ function masksShareBoundary(a: TerritoryMask, b: TerritoryMask, threshold = 10):
   }
 
   return false;
+}
+
+function findMaskEdgeAnchor(mask: TerritoryMask, towardX: number, towardY: number): { x: number; y: number } {
+  const fromX = mask.centerX;
+  const fromY = mask.centerY;
+  const dirX = towardX - fromX;
+  const dirY = towardY - fromY;
+  const dirLen = Math.hypot(dirX, dirY);
+  if (!Number.isFinite(dirLen) || dirLen < 0.001 || mask.borderPoints.length === 0) {
+    return { x: fromX, y: fromY };
+  }
+  const unitX = dirX / dirLen;
+  const unitY = dirY / dirLen;
+  let bestX = fromX;
+  let bestY = fromY;
+  let bestProjection = -Infinity;
+  let bestLateral = Infinity;
+
+  for (let i = 0; i < mask.borderPoints.length; i += 1) {
+    const packed = mask.borderPoints[i];
+    const localX = packed & 0xffff;
+    const localY = (packed >>> 16) & 0xffff;
+    const x = mask.minX + localX;
+    const y = mask.minY + localY;
+    const vx = x - fromX;
+    const vy = y - fromY;
+    const projection = vx * unitX + vy * unitY;
+    if (projection < bestProjection - 0.01) {
+      continue;
+    }
+    const lateral = Math.abs(vx * unitY - vy * unitX);
+    if (projection > bestProjection + 0.01 || lateral < bestLateral) {
+      bestProjection = projection;
+      bestLateral = lateral;
+      bestX = x;
+      bestY = y;
+    }
+  }
+
+  return { x: bestX, y: bestY };
 }
 
 function buildOutlineLoopsFromOwnershipGrid(
@@ -969,19 +1038,8 @@ function clampInRange(value: number, min: number, max: number): number {
   return clamp(value, min, max);
 }
 
-function normalizeLoopedOffsetX(x: number, mapWorldWidth: number): number {
-  if (!Number.isFinite(mapWorldWidth) || mapWorldWidth <= 0) {
-    return x;
-  }
-  const half = mapWorldWidth / 2;
-  let next = x;
-  while (next > half) {
-    next -= mapWorldWidth;
-  }
-  while (next < -half) {
-    next += mapWorldWidth;
-  }
-  return next;
+function normalizeLoopedOffsetX(x: number, _mapWorldWidth: number): number {
+  return x;
 }
 
 function boxesOverlap(
@@ -1570,8 +1628,10 @@ function App() {
 
   const currentPhase = parsePhase(state?.phase);
   const viewportAdaptiveFactor = clamp(1600 / Math.max(640, viewportWidth), 0.95, 1.85);
-  const textReadabilityScale = clamp(Math.pow(1 / Math.max(0.45, mapScale), 0.74) * viewportAdaptiveFactor * 1.1, 0.95, 2.85);
-  const chipReadabilityScale = clamp(Math.pow(1 / Math.max(0.5, mapScale), 0.6) * viewportAdaptiveFactor * 0.76, 0.85, 1.75);
+  const zoomReadabilityCompensation = clamp(Math.pow(1 / Math.max(0.45, mapScale), 0.66), 0.72, 2.8);
+  // Keep overlays naturally tied to map zoom; only apply a light viewport readability adjustment.
+  const textReadabilityScale = clamp(viewportAdaptiveFactor * 1.08 * zoomReadabilityCompensation, 0.9, 3.35);
+  const chipReadabilityScale = clamp(viewportAdaptiveFactor * 0.94 * Math.pow(zoomReadabilityCompensation, 0.9), 0.82, 2.65);
   const vectorScaleX = vectorTerritoryMap ? (mapPixelSize.width / vectorTerritoryMap.width) : 1;
   const vectorScaleY = vectorTerritoryMap ? (mapPixelSize.height / vectorTerritoryMap.height) : 1;
 
@@ -1959,53 +2019,72 @@ function App() {
     }
     const masks = territoryMasksRef.current;
     const overlayMap = new Map(regionOverlays.map(overlay => [overlay.id, overlay]));
-    const seen = new Set<string>();
     const paths: Array<{ key: string; d: string }> = [];
+    const neighborsById = new Map(worldClassic.map.territories.map(territory => [territory.id, new Set(territory.neighbors)]));
+    const mapWidth = Math.max(1, mapPixelSize.width);
 
-    for (const territory of worldClassic.map.territories) {
-      for (const neighborId of territory.neighbors) {
-        const a = territory.id;
-        const b = neighborId;
-        const key = a < b ? `${a}::${b}` : `${b}::${a}`;
-        if (seen.has(key)) {
-          continue;
-        }
-        seen.add(key);
-
-        const maskA = masks[a];
-        const maskB = masks[b];
-        const overlayA = overlayMap.get(a);
-        const overlayB = overlayMap.get(b);
-        if (!maskA || !maskB || !overlayA || !overlayB) {
-          continue;
-        }
-        if (masksShareBoundary(maskA, maskB, 12)) {
-          continue;
-        }
-
-        const x1 = overlayA.centerX;
-        const y1 = overlayA.centerY;
-        const x2 = overlayB.centerX;
-        const y2 = overlayB.centerY;
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const length = Math.hypot(dx, dy);
-        if (!Number.isFinite(length) || length < 14) {
-          continue;
-        }
-        const normalX = -dy / length;
-        const normalY = dx / length;
-        const bend = clamp(length * 0.13, 18, 62);
-        const sign = key.charCodeAt(0) % 2 === 0 ? 1 : -1;
-        const cx = (x1 + x2) * 0.5 + normalX * bend * sign;
-        const cy = (y1 + y2) * 0.5 + normalY * bend * sign;
-        const d = `M ${x1.toFixed(2)} ${y1.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${x2.toFixed(2)} ${y2.toFixed(2)}`;
-        paths.push({ key, d });
+    for (const spec of OFFICIAL_SEA_CONNECTIONS) {
+      const a = spec.a;
+      const b = spec.b;
+      const key = a < b ? `${a}::${b}` : `${b}::${a}`;
+      if (!neighborsById.get(a)?.has(b)) {
+        continue;
       }
+
+      const maskA = masks[a];
+      const maskB = masks[b];
+      const overlayA = overlayMap.get(a);
+      const overlayB = overlayMap.get(b);
+      if (!maskA || !maskB || !overlayA || !overlayB) {
+        continue;
+      }
+
+      const anchorA = findMaskEdgeAnchor(maskA, overlayB.centerX, overlayB.centerY);
+      const anchorB = findMaskEdgeAnchor(maskB, overlayA.centerX, overlayA.centerY);
+      const x1 = anchorA.x;
+      const y1 = anchorA.y;
+      const x2 = anchorB.x;
+      const y2 = anchorB.y;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const length = Math.hypot(dx, dy);
+      if (!Number.isFinite(length) || length < 14) {
+        continue;
+      }
+
+      if (spec.wrapAcrossMap) {
+        const aOnLeft = x1 <= x2;
+        const edgePad = 10;
+        const offscreenInset = 18;
+        const offscreenFromX = aOnLeft ? -offscreenInset : (mapWidth + offscreenInset);
+        const offscreenToX = aOnLeft ? (mapWidth + offscreenInset) : -offscreenInset;
+        const outCtrlX = aOnLeft ? (x1 - 34) : (x1 + 34);
+        const inCtrlX = aOnLeft ? (x2 + 34) : (x2 - 34);
+        const outCtrlY = y1 + (aOnLeft ? -8 : 8);
+        const inCtrlY = y2 + (aOnLeft ? 8 : -8);
+        paths.push({
+          key: `${key}::wrapA`,
+          d: `M ${x1.toFixed(2)} ${y1.toFixed(2)} Q ${outCtrlX.toFixed(2)} ${outCtrlY.toFixed(2)} ${offscreenFromX.toFixed(2)} ${y1.toFixed(2)}`
+        });
+        paths.push({
+          key: `${key}::wrapB`,
+          d: `M ${offscreenToX.toFixed(2)} ${y2.toFixed(2)} Q ${inCtrlX.toFixed(2)} ${inCtrlY.toFixed(2)} ${x2.toFixed(2)} ${y2.toFixed(2)}`
+        });
+        continue;
+      }
+
+      const normalX = -dy / length;
+      const normalY = dx / length;
+      const sign = spec.bendSign ?? ((key.charCodeAt(0) % 2 === 0) ? 1 : -1);
+      const bendFactor = spec.bendFactor ?? 0.13;
+      const bend = clamp(length * bendFactor, 12, 58);
+      const cx = (x1 + x2) * 0.5 + normalX * bend * sign;
+      const cy = (y1 + y2) * 0.5 + normalY * bend * sign;
+      paths.push({ key, d: `M ${x1.toFixed(2)} ${y1.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${x2.toFixed(2)} ${y2.toFixed(2)}` });
     }
 
     return paths;
-  }, [regionOverlays]);
+  }, [mapPixelSize.width, regionOverlays]);
   const playerColorById = useMemo(() => {
     if (!state) {
       return {} as Record<string, string>;
