@@ -114,4 +114,61 @@ public class RoomLifecycleApiTests : IClassFixture<WebApplicationFactory<Program
 
         Assert.Equal(HttpStatusCode.Conflict, startResponse.StatusCode);
     }
+
+    [Fact]
+    public async Task JoinRoom_SameClientId_ResumesSeatInsteadOfAddingDuplicateParticipant()
+    {
+        var createResponse = await _client.PostAsJsonAsync(
+            "/api/rooms",
+            new CreateRoomRequest("host-31", "Host 31", "world-classic", null, "client-host-31"));
+        createResponse.EnsureSuccessStatusCode();
+        var room = await createResponse.Content.ReadFromJsonAsync<CreateRoomResponse>();
+        Assert.NotNull(room);
+
+        var firstJoin = await _client.PostAsJsonAsync(
+            $"/api/rooms/{room!.RoomId}/join",
+            new JoinRoomRequest("peer-31-a", "Peer 31A", "client-31"));
+        firstJoin.EnsureSuccessStatusCode();
+        var firstPayload = await firstJoin.Content.ReadFromJsonAsync<JoinRoomResponse>();
+        Assert.NotNull(firstPayload);
+        Assert.Equal(2, firstPayload!.Participants.Count);
+
+        var resumedJoin = await _client.PostAsJsonAsync(
+            $"/api/rooms/{room.RoomId}/join",
+            new JoinRoomRequest("peer-31-b", "Peer 31B", "client-31"));
+        resumedJoin.EnsureSuccessStatusCode();
+        var resumedPayload = await resumedJoin.Content.ReadFromJsonAsync<JoinRoomResponse>();
+
+        Assert.NotNull(resumedPayload);
+        Assert.Equal(2, resumedPayload!.Participants.Count);
+        Assert.DoesNotContain(resumedPayload.Participants, participant => participant.PeerId == "peer-31-a");
+        Assert.Contains(resumedPayload.Participants, participant => participant.PeerId == "peer-31-b");
+        Assert.Equal(1, resumedPayload.Participants.Count(participant => participant.ClientId == "client-31"));
+    }
+
+    [Fact]
+    public async Task JoinRoom_SameClientIdAsHost_DoesNotReplaceHostSeat()
+    {
+        var createResponse = await _client.PostAsJsonAsync(
+            "/api/rooms",
+            new CreateRoomRequest("host-41", "Host 41", "world-classic", null, "client-shared"));
+        createResponse.EnsureSuccessStatusCode();
+        var room = await createResponse.Content.ReadFromJsonAsync<CreateRoomResponse>();
+        Assert.NotNull(room);
+
+        var joinResponse = await _client.PostAsJsonAsync(
+            $"/api/rooms/{room!.RoomId}/join",
+            new JoinRoomRequest("peer-41", "Peer 41", "client-shared"));
+
+        Assert.Equal(HttpStatusCode.Conflict, joinResponse.StatusCode);
+
+        var snapshotResponse = await _client.GetAsync($"/api/rooms/{room.RoomId}");
+        snapshotResponse.EnsureSuccessStatusCode();
+        var snapshot = await snapshotResponse.Content.ReadFromJsonAsync<RoomSnapshotResponse>();
+
+        Assert.NotNull(snapshot);
+        Assert.Equal("host-41", snapshot!.HostPeerId);
+        Assert.Single(snapshot.Participants);
+        Assert.Equal("host-41", snapshot.Participants[0].PeerId);
+    }
 }

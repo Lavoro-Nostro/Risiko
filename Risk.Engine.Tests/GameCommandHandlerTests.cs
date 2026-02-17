@@ -325,6 +325,50 @@ public class GameCommandHandlerTests
     }
 
     [Fact]
+    public void PlayCards_ThreeInfantry_GivesSixBonus()
+    {
+        var cardHands = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["p1"] = ["i1", "i2", "i3"],
+            ["p2"] = []
+        };
+        var cardSymbols = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["i1"] = "infantry",
+            ["i2"] = "infantry",
+            ["i3"] = "infantry"
+        };
+        var state = BuildState(TurnPhase.Reinforcement, "p1", 5, cardHands, cardSymbols);
+
+        var result = _handler.Handle(state, new PlayCardsCommand("match-1", "p1", "cmd-play-inf", ["i1", "i2", "i3"]));
+
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal(11, result.State.ReinforcementsAvailable);
+    }
+
+    [Fact]
+    public void PlayCards_ThreeCavalry_GivesEightBonus()
+    {
+        var cardHands = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["p1"] = ["c1", "c2", "c3"],
+            ["p2"] = []
+        };
+        var cardSymbols = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["c1"] = "cavalry",
+            ["c2"] = "cavalry",
+            ["c3"] = "cavalry"
+        };
+        var state = BuildState(TurnPhase.Reinforcement, "p1", 5, cardHands, cardSymbols);
+
+        var result = _handler.Handle(state, new PlayCardsCommand("match-1", "p1", "cmd-play-cav", ["c1", "c2", "c3"]));
+
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal(13, result.State.ReinforcementsAvailable);
+    }
+
+    [Fact]
     public void PlayCards_JokerWithTwoSame_GivesTwelveBonus()
     {
         var cardHands = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
@@ -366,6 +410,72 @@ public class GameCommandHandlerTests
 
         Assert.False(result.Validation.IsValid);
         Assert.Equal(CommandErrorCode.InvalidCards, result.Validation.ErrorCode);
+    }
+
+    [Fact]
+    public void PlayCards_TwoJokers_IsRejected()
+    {
+        var cardHands = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["p1"] = ["i1", "j1", "j2"],
+            ["p2"] = []
+        };
+        var cardSymbols = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["i1"] = "infantry",
+            ["j1"] = "joker",
+            ["j2"] = "joker"
+        };
+        var state = BuildState(TurnPhase.Reinforcement, "p1", 5, cardHands, cardSymbols);
+
+        var result = _handler.Handle(state, new PlayCardsCommand("match-1", "p1", "cmd-play-double-joker", ["i1", "j1", "j2"]));
+
+        Assert.False(result.Validation.IsValid);
+        Assert.Equal(CommandErrorCode.InvalidCards, result.Validation.ErrorCode);
+    }
+
+    [Fact]
+    public void PlayCards_UnknownSymbol_IsRejected()
+    {
+        var cardHands = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["p1"] = ["x1", "x2", "x3"],
+            ["p2"] = []
+        };
+        var cardSymbols = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["x1"] = "foo",
+            ["x2"] = "bar",
+            ["x3"] = "baz"
+        };
+        var state = BuildState(TurnPhase.Reinforcement, "p1", 5, cardHands, cardSymbols);
+
+        var result = _handler.Handle(state, new PlayCardsCommand("match-1", "p1", "cmd-play-unknown", ["x1", "x2", "x3"]));
+
+        Assert.False(result.Validation.IsValid);
+        Assert.Equal(CommandErrorCode.InvalidCards, result.Validation.ErrorCode);
+    }
+
+    [Fact]
+    public void PlayCards_ItalianSymbolAliases_AreAccepted()
+    {
+        var cardHands = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["p1"] = ["i1", "i2", "j1"],
+            ["p2"] = []
+        };
+        var cardSymbols = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["i1"] = "fanteria",
+            ["i2"] = "fante",
+            ["j1"] = "jolly"
+        };
+        var state = BuildState(TurnPhase.Reinforcement, "p1", 5, cardHands, cardSymbols);
+
+        var result = _handler.Handle(state, new PlayCardsCommand("match-1", "p1", "cmd-play-it-jolly", ["i1", "i2", "j1"]));
+
+        Assert.True(result.Validation.IsValid);
+        Assert.Equal(17, result.State.ReinforcementsAvailable);
     }
 
     [Fact]

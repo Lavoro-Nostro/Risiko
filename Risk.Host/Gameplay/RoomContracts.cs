@@ -3,14 +3,16 @@ namespace Risk.Host.Gameplay;
 public sealed record RoomParticipant(
     string PeerId,
     string DisplayName,
-    DateTimeOffset JoinedAtUtc
+    DateTimeOffset JoinedAtUtc,
+    string? ClientId = null
 );
 
 public sealed record CreateRoomRequest(
     string HostPeerId,
     string HostDisplayName,
     string MapId,
-    string? RoomName = null
+    string? RoomName = null,
+    string? ClientId = null
 );
 
 public sealed record CreateRoomResponse(
@@ -24,7 +26,8 @@ public sealed record CreateRoomResponse(
 
 public sealed record JoinRoomRequest(
     string PeerId,
-    string DisplayName
+    string DisplayName,
+    string? ClientId = null
 );
 
 public sealed record JoinRoomResponse(

@@ -28,10 +28,12 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
         var roomName = string.IsNullOrWhiteSpace(request.RoomName)
             ? $"Lobby {roomId}"
             : request.RoomName.Trim();
+        var normalizedClientId = NormalizeClientId(request.ClientId, request.HostPeerId);
         var host = new RoomParticipant(
             request.HostPeerId,
             request.HostDisplayName,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            normalizedClientId);
 
         var room = new RoomSession(
             roomId,
@@ -104,9 +106,42 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
             {
                 throw new InvalidOperationException("Room is not open.");
             }
+            var normalizedClientId = NormalizeClientId(request.ClientId, request.PeerId);
 
             if (room.Participants.Any(p => p.PeerId == request.PeerId))
             {
+                return new JoinRoomResponse(
+                    roomId,
+                    room.RoomName,
+                    room.MapId,
+                    room.HostPeerId,
+                    room.Status.ToString().ToLowerInvariant(),
+                    room.ActiveMatchId,
+                    room.Participants.ToList());
+            }
+
+            var existingByClient = room.Participants.FindIndex(participant =>
+                string.Equals(NormalizeClientId(participant.ClientId, participant.PeerId), normalizedClientId, StringComparison.Ordinal));
+            if (existingByClient >= 0)
+            {
+                var previous = room.Participants[existingByClient];
+                var isExistingHostSeat = string.Equals(room.HostPeerId, previous.PeerId, StringComparison.Ordinal);
+                if (isExistingHostSeat && !string.Equals(previous.PeerId, request.PeerId, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Host seat cannot be resumed via join with a different peer id.");
+                }
+                room.Participants[existingByClient] = previous with
+                {
+                    PeerId = request.PeerId,
+                    DisplayName = request.DisplayName,
+                    ClientId = normalizedClientId
+                };
+
+                if (string.Equals(room.HostPeerId, previous.PeerId, StringComparison.Ordinal))
+                {
+                    room.HostPeerId = request.PeerId;
+                }
+
                 return new JoinRoomResponse(
                     roomId,
                     room.RoomName,
@@ -122,7 +157,7 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
                 throw new InvalidOperationException("Room is full (max 6 players).");
             }
 
-            room.Participants.Add(new RoomParticipant(request.PeerId, request.DisplayName, DateTimeOffset.UtcNow));
+            room.Participants.Add(new RoomParticipant(request.PeerId, request.DisplayName, DateTimeOffset.UtcNow, normalizedClientId));
             return new JoinRoomResponse(
                 roomId,
                 room.RoomName,
@@ -514,6 +549,11 @@ public sealed class InMemoryRoomSessionService : IRoomSessionService
         }
 
         return values;
+    }
+
+    private static string NormalizeClientId(string? clientId, string fallbackPeerId)
+    {
+        return string.IsNullOrWhiteSpace(clientId) ? fallbackPeerId : clientId.Trim();
     }
 
     private sealed record ObjectiveTemplate(

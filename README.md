@@ -21,7 +21,7 @@ Core engine, host command flow, room/reconnect lifecycle, and first web map rend
 - `Risk.Web` -> client UI/UX and map interaction layer
 - `packs` -> data-driven map and localization packs
 
-Detailed plan: `RisiKo!_MASTER_PLAN.md`
+Detailed plan: `RISIKO_MASTER_PLAN.md`
 
 ## Multiplayer Model
 
@@ -32,7 +32,7 @@ Detailed plan: `RisiKo!_MASTER_PLAN.md`
 
 ## Repository Layout
 
-- `RisiKo!_MASTER_PLAN.md` -> execution plan with `RIS-*` IDs
+- `RISIKO_MASTER_PLAN.md` -> execution plan with `RIS-*` IDs
 - `WORK_TRACKING.md` -> operational tracking baseline
 - `docs/` -> product, design, architecture, networking, QA, planning, governance
 - `.github/` -> workflows, templates, repository automation
@@ -120,6 +120,7 @@ Full contribution and merge flow:
 
 ## Documentation Index
 
+- Main documentation index: `docs/README.md`
 - Product vision: `docs/01-product/vision.md`
 - Core rules: `docs/02-game-design/rules-core.md`
 - System overview: `docs/03-architecture/system-overview.md`

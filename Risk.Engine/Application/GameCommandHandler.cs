@@ -980,7 +980,11 @@ public sealed class GameCommandHandler
             return false;
         }
 
-        var normalized = symbols.Select(value => value.ToLowerInvariant()).ToList();
+        var normalized = symbols.Select(NormalizeCardSymbol).ToList();
+        if (normalized.Any(string.IsNullOrEmpty))
+        {
+            return false;
+        }
         var jokerCount = normalized.Count(symbol => symbol == "joker");
         if (jokerCount > 1)
         {
@@ -1020,6 +1024,26 @@ public sealed class GameCommandHandler
         }
 
         return false;
+    }
+
+    private static string NormalizeCardSymbol(string raw)
+    {
+        var value = (raw ?? string.Empty).Trim().ToLowerInvariant();
+        return value switch
+        {
+            "infantry" => "infantry",
+            "fante" => "infantry",
+            "fanteria" => "infantry",
+            "cavalry" => "cavalry",
+            "cavallo" => "cavalry",
+            "cavalleria" => "cavalry",
+            "artillery" => "artillery",
+            "artiglieria" => "artillery",
+            "cannone" => "artillery",
+            "joker" => "joker",
+            "jolly" => "joker",
+            _ => string.Empty
+        };
     }
 
     private long NextSequence()
